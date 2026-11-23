@@ -32,9 +32,16 @@ jobs:
         working-directory: work/shopmaster_pro
         run: flutter pub get
 
-      - name: Apply app icon
+      - name: Apply app icon (optional)
         working-directory: work/shopmaster_pro
-        run: dart run flutter_launcher_icons
+        run: |
+          if [ -f assets/logo.png ] && [ -f assets/logo_foreground.png ]; then
+            flutter pub add --dev flutter_launcher_icons || true
+            printf '%s\n' 'flutter_launcher_icons:' '  android: true' '  ios: false' '  image_path: "assets/logo.png"' '  adaptive_icon_background: "#0B1A33"' '  adaptive_icon_foreground: "assets/logo_foreground.png"' > flutter_launcher_icons.yaml
+            dart run flutter_launcher_icons -f flutter_launcher_icons.yaml || echo "Icon step skipped"
+          else
+            echo "No logo files found, skipping icon"
+          fi
 
       - name: Analyze (report only)
         working-directory: work/shopmaster_pro
