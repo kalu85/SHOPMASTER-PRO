@@ -51,13 +51,23 @@ jobs:
         working-directory: work/shopmaster_pro
         run: flutter test || true
 
-      - name: Raise compileSdk to 36
+      - name: Raise compileSdk to 36 (app and all plugins)
         working-directory: work/shopmaster_pro
         run: |
+          mkdir -p ~/.gradle/init.d
+          cat > ~/.gradle/init.d/sdk36.gradle <<'EOF'
+          gradle.afterProject { p ->
+            def ext = p.extensions.findByName('android')
+            if (ext != null) {
+              try { ext.compileSdkVersion(36) } catch (Throwable t) { println "sdk36 skipped for ${p.name}: ${t.message}" }
+            }
+          }
+          EOF
+          sed -i 's/^          //' ~/.gradle/init.d/sdk36.gradle
+          cat ~/.gradle/init.d/sdk36.gradle
           for f in android/app/build.gradle.kts android/app/build.gradle; do
             if [ -f "$f" ]; then
               sed -i -E 's/compileSdk(Version)?[ =]+flutter\.compileSdkVersion/compileSdk = 36/; s/compileSdk(Version)?[ =]+[0-9]+/compileSdk = 36/' "$f"
-              grep -n "compileSdk" "$f"
             fi
           done
 
