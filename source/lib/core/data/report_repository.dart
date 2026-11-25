@@ -10,6 +10,7 @@ enum ReportType {
   gst,
   gstReadiness,
   gstr3bPreparation,
+  caGstPack,
   nonGst,
   profitLoss,
   stock,
@@ -45,6 +46,7 @@ const List<ReportInfo> kReports = [
   ReportInfo(ReportType.gst, 'GST report', true),
   ReportInfo(ReportType.gstReadiness, 'CA preparation & GST data checks', true),
   ReportInfo(ReportType.gstr3bPreparation, 'GSTR-3B preparation (working paper)', true),
+  ReportInfo(ReportType.caGstPack, 'GST report pack for CA', true),
   ReportInfo(ReportType.nonGst, 'NON-GST report', true),
   ReportInfo(ReportType.profitLoss, 'Profit and loss', true),
   ReportInfo(ReportType.stock, 'Stock report', false),
@@ -124,6 +126,8 @@ class ReportRepository {
         return _gstReadiness(from, to);
       case ReportType.gstr3bPreparation:
         return _gstr3bPreparation(from, to);
+      case ReportType.caGstPack:
+        return _caGstPack(from, to);
       case ReportType.nonGst:
         return _nonGst(from, to);
       case ReportType.profitLoss:
@@ -531,6 +535,122 @@ class ReportRepository {
         'Non-GST records are not automatically exempt; CA should classify pre-registration, exempt and other supplies.',
         'Returns are deducted from their respective sales or purchase totals.',
         'Working paper only: not an official GSTR-1 / GSTR-3B return. CA must verify classification, exemptions, ITC eligibility and filing.',
+      ],
+    );
+  }
+
+
+  /// Combined CA-facing GST working paper. It contains only saved app data.
+  Future<ReportData> _caGstPack(String from, String to) async {
+    final db = await _db;
+    final invoices = await db.query('invoices',
+      where: "doc_type IN ('invoice', 'return') AND invoice_date BETWEEN ? AND ?",
+      whereArgs: [from, to], orderBy: 'invoice_date, id');
+    final items = await db.rawQuery('''
+      SELECT i.kind, i.doc_type, i.is_gst, i.number, i.invoice_date,
+        i.party_name, i.party_gstin, ii.name AS item_name, ii.hsn,
+        ii.gst_rate, ii.taxable, ii.cgst, ii.sgst, ii.igst
+      FROM invoices i JOIN invoice_items ii ON ii.invoice_id = i.id
+      WHERE i.doc_type IN ('invoice', 'return') AND i.invoice_date BETWEEN ? AND ?
+      ORDER BY i.invoice_date, i.number, ii.id
+    ''', [from, to]);
+
+    final out = <List<String>>[];
+    final monthly = <String, Map<String, double>>{};
+    final customerClass = <String, Map<String, double>>{};
+    final hsnTotals = <String, Map<String, double>>{};
+    var salesTaxable = 0.0, salesCgst = 0.0, salesSgst = 0.0, salesIgst = 0.0;
+    var purchaseTaxable = 0.0, purchaseCgst = 0.0, purchaseSgst = 0.0, purchaseIgst = 0.0;
+    var missingHsn = 0, missingGstin = 0, gstSaleDocs = 0, gstPurchaseDocs = 0;
+    var nonGstDocs = 0, returns = 0;
+
+    for (final inv in invoices) {
+      final sale = inv['kind'] == 'sale';
+      final isReturn = inv['doc_type'] == 'return';
+      final gst = (inv['is_gst'] as num).toInt() == 1;
+      final sign = isReturn ? -1.0 : 1.0;
+      final date = inv['invoice_date'] as String? ?? '';
+      final period = date.length >= 7 ? date.substring(0, 7) : date;
+      final taxable = sign * _d(inv['taxable_total']);
+      if (isReturn) returns++;
+      if (!gst) { nonGstDocs++; continue; }
+      if (sale) {
+        gstSaleDocs++; salesTaxable += taxable;
+        salesCgst += sign * _d(inv['cgst']); salesSgst += sign * _d(inv['sgst']); salesIgst += sign * _d(inv['igst']);
+      } else {
+        gstPurchaseDocs++; purchaseTaxable += taxable;
+        purchaseCgst += sign * _d(inv['cgst']); purchaseSgst += sign * _d(inv['sgst']); purchaseIgst += sign * _d(inv['igst']);
+      }
+      final m = monthly.putIfAbsent(period, () => {'sales': 0, 'purchases': 0});
+      final mk = sale ? 'sales' : 'purchases';
+      m[mk] = (m[mk] ?? 0) + taxable;
+      if (sale) {
+        final gstin = (inv['party_gstin'] as String? ?? '').trim();
+        final cls = gstin.isEmpty ? 'B2C / GSTIN blank - verify' : 'B2B (GSTIN recorded)';
+        final g = customerClass.putIfAbsent(cls, () => {'taxable': 0, 'tax': 0});
+        g['taxable'] = (g['taxable'] ?? 0) + taxable;
+        g['tax'] = (g['tax'] ?? 0) + sign * (_d(inv['cgst']) + _d(inv['sgst']) + _d(inv['igst']));
+      }
+    }
+    for (final row in items) {
+      if ((row['is_gst'] as num).toInt() != 1 || row['kind'] != 'sale') continue;
+      final sign = row['doc_type'] == 'return' ? -1.0 : 1.0;
+      final hsn = (row['hsn'] as String? ?? '').trim();
+      if (hsn.isEmpty) { missingHsn++; continue; }
+      final rate = (row['gst_rate'] as num?)?.toInt() ?? 0;
+      final key = '$hsn / $rate%';
+      final g = hsnTotals.putIfAbsent(key, () => {'taxable': 0, 'cgst': 0, 'sgst': 0, 'igst': 0});
+      g['taxable'] = (g['taxable'] ?? 0) + sign * _d(row['taxable']);
+      g['cgst'] = (g['cgst'] ?? 0) + sign * _d(row['cgst']);
+      g['sgst'] = (g['sgst'] ?? 0) + sign * _d(row['sgst']);
+      g['igst'] = (g['igst'] ?? 0) + sign * _d(row['igst']);
+    }
+
+    out.add(['PERIOD SUMMARY', '', 'GST sales taxable', money(salesTaxable), 'Output GST ${money(salesCgst + salesSgst + salesIgst)}']);
+    out.add(['PERIOD SUMMARY', '', 'GST purchase taxable', money(purchaseTaxable), 'Purchase GST recorded ${money(purchaseCgst + purchaseSgst + purchaseIgst)}; ITC not determined']);
+    for (final e in monthly.entries) {
+      out.add(['MONTHLY', e.key, 'Sales taxable', money(e.value['sales'] ?? 0), '']);
+      out.add(['MONTHLY', e.key, 'Purchase taxable', money(e.value['purchases'] ?? 0), '']);
+    }
+    for (final e in customerClass.entries) {
+      out.add(['B2B / B2C', '', e.key, money(e.value['taxable'] ?? 0), 'GST ${money(e.value['tax'] ?? 0)}']);
+    }
+    out.add(['TAX SPLIT', 'Output on sales', 'CGST', money(salesCgst), 'SGST ${money(salesSgst)}; IGST ${money(salesIgst)}']);
+    out.add(['TAX SPLIT', 'Purchase ledger', 'CGST', money(purchaseCgst), 'SGST ${money(purchaseSgst)}; IGST ${money(purchaseIgst)} (not eligible ITC)']);
+    for (final e in hsnTotals.entries) {
+      final v = e.value;
+      out.add(['HSN SALES', '', e.key, money(v['taxable'] ?? 0), 'CGST ${money(v['cgst'] ?? 0)}; SGST ${money(v['sgst'] ?? 0)}; IGST ${money(v['igst'] ?? 0)}']);
+    }
+    for (final inv in invoices.where((r) => r['kind'] == 'purchase' && (r['is_gst'] as num).toInt() == 1)) {
+      final sign = inv['doc_type'] == 'return' ? -1.0 : 1.0;
+      out.add(['PURCHASE REGISTER', inv['invoice_date'] as String? ?? '', '${inv['number']} / ${inv['party_name']}', money(sign * _d(inv['taxable_total'])), 'GSTIN ${inv['party_gstin'] ?? ''}; GST ${money(sign * (_d(inv['cgst']) + _d(inv['sgst']) + _d(inv['igst'])))}']);
+    }
+    for (final inv in invoices.where((r) => (r['is_gst'] as num).toInt() == 1 && r['kind'] == 'sale')) {
+      if ((inv['party_gstin'] as String? ?? '').trim().isEmpty) {
+        missingGstin++;
+        out.add(['DATA CHECK', inv['number'] as String? ?? '', 'Sales party GSTIN blank; verify B2C / B2B classification', '', '']);
+      }
+    }
+    final productsWithoutHsn = await db.rawQuery("SELECT name FROM products WHERE is_service = 0 AND TRIM(COALESCE(hsn, '')) = '' ORDER BY name COLLATE NOCASE");
+    for (final p in productsWithoutHsn) {
+      out.add(['DATA CHECK', '', 'Catalogue item missing HSN: ${p['name']}', '', '']);
+    }
+    out.add(['RETURNS', '', 'Sales and purchase returns', '$returns documents', 'Returns are netted from relevant totals']);
+    out.add(['GSTR-3B WORKING PAPER', '3.1(a) draft basis', 'Recorded outward taxable sales', money(salesTaxable), 'Output tax: IGST ${money(salesIgst)}, CGST ${money(salesCgst)}, SGST ${money(salesSgst)}']);
+    out.add(['GSTR-3B WORKING PAPER', 'Purchase review', 'Purchase GST recorded; ITC eligibility not assessed', money(purchaseTaxable), 'IGST ${money(purchaseIgst)}, CGST ${money(purchaseCgst)}, SGST ${money(purchaseSgst)}']);
+    out.add(['GSTR-3B WORKING PAPER', 'Classification review', 'Non-GST documents', '$nonGstDocs', 'Classify with CA; not automatically exempt']);
+
+    return ReportData(
+      title: 'SHOPMASTER PRO – GST report pack for CA ($from to $to)',
+      columns: const ['Section', 'Date / Period', 'Document / Party / HSN', 'Taxable / Value', 'Tax / Review notes'],
+      rows: out,
+      summary: [
+        'GST sales documents: $gstSaleDocs; GST purchase documents: $gstPurchaseDocs; returns: $returns; non-GST documents: $nonGstDocs',
+        'Recorded output tax: ${money(salesCgst + salesSgst + salesIgst)} (CGST ${money(salesCgst)}, SGST ${money(salesSgst)}, IGST ${money(salesIgst)})',
+        'Purchase-side GST recorded: ${money(purchaseCgst + purchaseSgst + purchaseIgst)} — not treated as eligible ITC.',
+        'Missing HSN sales lines: $missingHsn; sales invoices with blank party GSTIN: $missingGstin; catalogue items without HSN: ${productsWithoutHsn.length}',
+        'CA must reconcile purchase invoices with GST Portal GSTR-2B and verify ITC, reverse charge, exempt/nil/zero-rated supplies, place of supply, amendments and other adjustments.',
+        'This report uses only records saved in SHOPMASTER PRO. It is a CA working-paper pack, not an official GSTR-1/GSTR-3B, GSTN data, or a filed return.',
       ],
     );
   }
