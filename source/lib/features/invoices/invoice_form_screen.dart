@@ -106,6 +106,8 @@ class _InvoiceFormScreenState extends State<InvoiceFormScreen> {
           gstRate: it.gstRate,
           serials: it.serials,
           warrantyMonths: it.warrantyMonths,
+          batchNumber: it.batchNumber,
+          expiryDate: it.expiryDate == null ? null : DateTime.tryParse(it.expiryDate!),
         ));
       }
       if (!mounted) return;
@@ -302,6 +304,7 @@ class _InvoiceFormScreenState extends State<InvoiceFormScreen> {
       showSerials: _serialsAllowed,
       showWarranty: _isSale && _serialsAllowed,
       showCost: _isSale,
+      showExpiry: _isPurchaseInvoice,
     );
     if (edited != null && mounted) setState(() => _lines[i] = edited);
   }
@@ -434,6 +437,10 @@ class _InvoiceFormScreenState extends State<InvoiceFormScreen> {
           warrantyMonths: _isSale ? _lines[i].warrantyMonths : 0,
           purchaseRateSnapshot: _lines[i].product?.purchaseRate ??
               (_isPurchaseInvoice ? _lines[i].rate : 0),
+          batchNumber: _isPurchaseInvoice ? _lines[i].batchNumber : '',
+          expiryDate: _isPurchaseInvoice && _lines[i].expiryDate != null
+              ? isoDateFmt.format(_lines[i].expiryDate!)
+              : null,
         ),
     ];
     try {
