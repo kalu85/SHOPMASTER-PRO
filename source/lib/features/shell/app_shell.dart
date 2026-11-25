@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/models/app_module.dart';
 import '../../core/theme/app_colors.dart';
 import '../dashboard/dashboard_screen.dart';
+import '../help/shop_guide_screen.dart';
 import '../../core/models/invoice.dart' show InvoiceKind;
 import '../invoices/invoices_screen.dart';
 import '../parties/parties_screen.dart';
@@ -75,6 +76,8 @@ class _AppShellState extends State<AppShell> {
         return const ShopSettingsScreen();
       case 'search':
         return SearchScreen(onOpenModule: _openById);
+      case 'help':
+        return ShopGuideScreen(onOpenModule: _openById);
     }
     return ModulePlaceholderScreen(module: module);
   }
