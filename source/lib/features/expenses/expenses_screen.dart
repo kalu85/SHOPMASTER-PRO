@@ -1,4 +1,9 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../core/data/account_repository.dart';
 import '../../core/models/account.dart';
@@ -45,6 +50,58 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
   }
 
   double get _total => _rows.fold<double>(0, (s, e) => s + e.amount);
+
+  String _csvCell(Object? value) {
+    var text = value?.toString() ?? '';
+    // Prevent spreadsheet formula execution from user-entered notes/categories.
+    if (RegExp(r'^\\s*[=+@-]').hasMatch(text)) text = "'$text";
+    return '"${text.replaceAll('"', '""')}"';
+  }
+
+  Future<void> _exportCsv() async {
+    if (_rows.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('There are no expenses to export in this date range.')),
+      );
+      return;
+    }
+    try {
+      final accountNames = {
+        for (final account in _accounts)
+          if (account.id != null) account.id!: account.name,
+      };
+      final lines = <String>[
+        ['Date', 'Category', 'Amount (INR)', 'Payment mode', 'Account', 'Notes']
+            .map(_csvCell)
+            .join(','),
+        for (final expense in _rows)
+          [
+            expense.date,
+            expense.category,
+            expense.amount.toStringAsFixed(2),
+            expense.payMode,
+            accountNames[expense.accountId] ?? 'Account unavailable',
+            expense.notes,
+          ].map(_csvCell).join(','),
+      ];
+      lines.add('');
+      lines.add(['Total expenses', _total.toStringAsFixed(2)].map(_csvCell).join(','));
+      final directory = await getTemporaryDirectory();
+      final filename =
+          'expenses_${isoDateFmt.format(_range!.start)}_to_${isoDateFmt.format(_range!.end)}.csv';
+      final file = File(p.join(directory.path, filename));
+      await file.writeAsString('${lines.join('\\r\\n')}\\r\\n', flush: true);
+      await Share.shareXFiles(
+        [XFile(file.path, mimeType: 'text/csv')],
+        subject: 'Shop expenses',
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not export expenses: $error')),
+      );
+    }
+  }
 
   Future<void> _pickRange() async {
     final r = await showDateRangePicker(
@@ -347,7 +404,13 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                               '${dateFmt.format(r.start)} - ${dateFmt.format(r.end)}'),
                         ),
                       ),
-                      const SizedBox(width: 12),
+                      const SizedBox(width: 4),
+                      IconButton(
+                        tooltip: 'Export expenses as CSV',
+                        onPressed: _rows.isEmpty ? null : _exportCsv,
+                        icon: const Icon(Icons.file_download_outlined),
+                      ),
+                      const SizedBox(width: 8),
                       Text(inr.format(_total),
                           style: const TextStyle(
                               fontWeight: FontWeight.w800, fontSize: 16)),
