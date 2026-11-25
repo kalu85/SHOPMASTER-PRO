@@ -65,7 +65,7 @@ class _SerialScannerScreenState extends State<SerialScannerScreen> {
         body: MobileScanner(
           controller: _controller,
           onDetect: _onDetect,
-          errorBuilder: (context, error, child) {
+          errorBuilder: (context, error) {
             final details = [
               'Error code: ${error.errorCode.name}',
               if (error.errorDetails?.message case final message?)
