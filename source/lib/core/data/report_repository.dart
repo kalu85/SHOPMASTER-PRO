@@ -9,6 +9,7 @@ enum ReportType {
   purchaseSummary,
   gst,
   gstReadiness,
+  gstr3bPreparation,
   nonGst,
   profitLoss,
   stock,
@@ -43,6 +44,7 @@ const List<ReportInfo> kReports = [
       grouped: true),
   ReportInfo(ReportType.gst, 'GST report', true),
   ReportInfo(ReportType.gstReadiness, 'CA preparation & GST data checks', true),
+  ReportInfo(ReportType.gstr3bPreparation, 'GSTR-3B preparation (working paper)', true),
   ReportInfo(ReportType.nonGst, 'NON-GST report', true),
   ReportInfo(ReportType.profitLoss, 'Profit and loss', true),
   ReportInfo(ReportType.stock, 'Stock report', false),
@@ -120,6 +122,8 @@ class ReportRepository {
         return _gst(from, to);
       case ReportType.gstReadiness:
         return _gstReadiness(from, to);
+      case ReportType.gstr3bPreparation:
+        return _gstr3bPreparation(from, to);
       case ReportType.nonGst:
         return _nonGst(from, to);
       case ReportType.profitLoss:
@@ -291,6 +295,96 @@ class ReportRepository {
         'GST collected on sales (output): ${money(outGst)}',
         'GST paid on purchases (input): ${money(inGst)}',
         'Net GST payable: ${money(outGst - inGst)}',
+      ],
+    );
+  }
+
+  /// GSTR-3B preparation working paper. This intentionally does not calculate
+  /// eligible ITC or claim tax credits: the current schema does not capture
+  /// ITC eligibility, reversals, reverse charge, exempt/zero-rated categories,
+  /// imports, or portal-sourced adjustments.
+  Future<ReportData> _gstr3bPreparation(String from, String to) async {
+    final db = await _db;
+    final rows = await db.rawQuery('''
+      SELECT kind, doc_type, is_gst,
+        SUM(CASE WHEN doc_type = 'invoice' THEN taxable_total
+                 WHEN doc_type = 'return' THEN -taxable_total ELSE 0 END) AS taxable,
+        SUM(CASE WHEN doc_type = 'invoice' THEN cgst
+                 WHEN doc_type = 'return' THEN -cgst ELSE 0 END) AS cgst,
+        SUM(CASE WHEN doc_type = 'invoice' THEN sgst
+                 WHEN doc_type = 'return' THEN -sgst ELSE 0 END) AS sgst,
+        SUM(CASE WHEN doc_type = 'invoice' THEN igst
+                 WHEN doc_type = 'return' THEN -igst ELSE 0 END) AS igst,
+        COUNT(*) AS documents
+      FROM invoices
+      WHERE doc_type IN ('invoice', 'return')
+        AND invoice_date BETWEEN ? AND ?
+      GROUP BY kind, is_gst
+      ORDER BY kind, is_gst
+    ''', [from, to]);
+
+    var outwardTaxable = 0.0;
+    var outputCgst = 0.0, outputSgst = 0.0, outputIgst = 0.0;
+    var purchaseTaxable = 0.0;
+    var purchaseCgst = 0.0, purchaseSgst = 0.0, purchaseIgst = 0.0;
+    var nonGstSales = 0.0, nonGstPurchases = 0.0;
+    var gstSalesDocuments = 0, gstPurchaseDocuments = 0;
+    var nonGstDocuments = 0;
+
+    for (final row in rows) {
+      final isSale = row['kind'] == 'sale';
+      final isGst = _d(row['is_gst']) == 1;
+      final taxable = _d(row['taxable']);
+      final cgst = _d(row['cgst']);
+      final sgst = _d(row['sgst']);
+      final igst = _d(row['igst']);
+      if (!isGst) {
+        nonGstDocuments += (row['documents'] as num).toInt();
+        if (isSale) {
+          nonGstSales += taxable;
+        } else {
+          nonGstPurchases += taxable;
+        }
+        continue;
+      }
+      if (isSale) {
+        gstSalesDocuments += (row['documents'] as num).toInt();
+        outwardTaxable += taxable;
+        outputCgst += cgst;
+        outputSgst += sgst;
+        outputIgst += igst;
+      } else {
+        gstPurchaseDocuments += (row['documents'] as num).toInt();
+        purchaseTaxable += taxable;
+        purchaseCgst += cgst;
+        purchaseSgst += sgst;
+        purchaseIgst += igst;
+      }
+    }
+
+    final outputTax = outputCgst + outputSgst + outputIgst;
+    final recordedPurchaseTax = purchaseCgst + purchaseSgst + purchaseIgst;
+    return ReportData(
+      title: 'GSTR-3B preparation working paper ($from to $to)',
+      columns: const ['Area', 'Particulars', 'Taxable / value', 'IGST', 'CGST', 'SGST'],
+      rows: [
+        ['3.1(a) draft basis', 'Recorded GST sales (returns deducted)',
+          money(outwardTaxable), money(outputIgst), money(outputCgst), money(outputSgst)],
+        ['Purchase review', 'GST recorded on purchase documents (not eligible ITC)',
+          money(purchaseTaxable), money(purchaseIgst), money(purchaseCgst), money(purchaseSgst)],
+        ['Classification review', 'Non-GST sales; classification not stored',
+          money(nonGstSales), '', '', ''],
+        ['Classification review', 'Non-GST purchases; classification not stored',
+          money(nonGstPurchases), '', '', ''],
+      ],
+      summary: [
+        'GST sales documents: $gstSalesDocuments; GST purchase documents: $gstPurchaseDocuments',
+        'Output tax recorded: ${money(outputTax)}',
+        'Input tax recorded on purchases: ${money(recordedPurchaseTax)} — NOT treated as eligible ITC.',
+        'Non-GST documents needing classification: $nonGstDocuments',
+        'Not a complete GSTR-3B: reverse charge, zero-rated, nil/exempt, non-GST classification, imports, ITC eligibility/reversals and other adjustments are not captured by this app data.',
+        'No net tax payable or ITC claim is calculated. CA must reconcile with books, GSTR-2B and GST Portal before filing.',
+        'Working paper only — not uploaded, submitted or filed with GST Portal.',
       ],
     );
   }
