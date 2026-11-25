@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/data/account_repository.dart';
+import 'profit_overview_card.dart';
 import '../../core/data/invoice_repository.dart';
 import '../../core/data/party_repository.dart';
 import '../../core/models/account.dart';
@@ -131,6 +132,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
           padding: const EdgeInsets.all(16),
           children: [
             _QuickActions(onOpenModule: onOpenModule),
+            const SizedBox(height: 16),
+            const ProfitOverviewCard(),
             const SizedBox(height: 16),
             Wrap(
               spacing: gap,
