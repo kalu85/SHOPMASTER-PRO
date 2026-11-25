@@ -20,7 +20,7 @@ class GoogleDriveBackupService {
   final GoogleSignIn _signIn = GoogleSignIn(scopes: [_scope]);
   String? _folderId;
 
-  bool get isSignedIn => _signIn.currentUser != null;
+  bool get isSignedIn => _signIn.currentUser != null;\n\n  Future<void> restoreSession() async {\n    await _signIn.signInSilently();\n  }
   String? get accountEmail => _signIn.currentUser?.email;
 
   Future<void> signIn() async {
