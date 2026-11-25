@@ -25,7 +25,11 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
   DocType _doc = DocType.invoice;
   List<Invoice> _items = [];
   bool _loading = true;
+  bool _hasMore = false;
+  bool _loadingMore = false;
   String? _error;
+
+  static const int _pageSize = 100;
 
   bool get _isSale => widget.kind == InvoiceKind.sale;
   Color get _color => _isSale ? AppColors.sales : AppColors.purchases;
@@ -53,11 +57,18 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
   }
 
   Future<void> _load() async {
+    setState(() => _loading = true);
     try {
-      final items = await _repo.list(widget.kind, _doc, query: _search.text);
+      final page = await _repo.list(
+        widget.kind,
+        _doc,
+        query: _search.text,
+        limit: _pageSize + 1,
+      );
       if (!mounted) return;
       setState(() {
-        _items = items;
+        _hasMore = page.length > _pageSize;
+        _items = page.take(_pageSize).toList();
         _loading = false;
         _error = null;
       });
@@ -67,6 +78,32 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
         _loading = false;
         _error = 'Could not load: $e';
       });
+    }
+  }
+
+  Future<void> _loadMore() async {
+    if (_loadingMore || !_hasMore) return;
+    setState(() => _loadingMore = true);
+    try {
+      final page = await _repo.list(
+        widget.kind,
+        _doc,
+        query: _search.text,
+        limit: _pageSize + 1,
+        offset: _items.length,
+      );
+      if (!mounted) return;
+      setState(() {
+        _hasMore = page.length > _pageSize;
+        _items.addAll(page.take(_pageSize));
+        _loadingMore = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _loadingMore = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not load older documents: $e')),
+      );
     }
   }
 
@@ -228,7 +265,7 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
     );
     return ListView.separated(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
-      itemCount: _items.length + 1,
+      itemCount: _items.length + 1 + (_hasMore ? 1 : 0),
       separatorBuilder: (_, __) => const SizedBox(height: 8),
       itemBuilder: (context, i) {
         if (i == 0) {
@@ -296,6 +333,24 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
                       ),
                     ),
                 ],
+              ),
+            ),
+          );
+        }
+        if (i > _items.length) {
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: OutlinedButton.icon(
+                onPressed: _loadingMore ? null : _loadMore,
+                icon: _loadingMore
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.expand_more_rounded),
+                label: Text(_loadingMore ? 'Loading…' : 'Load older documents'),
               ),
             ),
           );
