@@ -313,8 +313,16 @@ class _InvoiceFormScreenState extends State<InvoiceFormScreen> {
   String? _validate(InvoiceTotals t) {
     if (_lines.isEmpty) return 'Add at least one item';
     if (t.grandTotal <= 0) return 'The total must be greater than zero';
+    final seenSerials = <String>{};
     for (final l in _lines) {
-      final n = parseSerials(l.serials).length;
+      final serials = parseSerials(l.serials);
+      for (final serial in serials) {
+        final key = serial.toLowerCase();
+        if (!seenSerials.add(key)) {
+          return 'Serial "$serial" appears more than once in this invoice';
+        }
+      }
+      final n = serials.length;
       if (n > 0 && n != l.qty.round()) {
         return '${l.name}: ${l.qty.round()} item(s) but $n serial number(s)';
       }
