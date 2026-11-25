@@ -127,17 +127,26 @@ class ProductRepository {
     String note = '',
     double? expectedCurrentStock,
   }) async {
+    if (!change.isFinite || change == 0) {
+      throw ArgumentError.value(change, 'change', 'Must be a finite, non-zero quantity.');
+    }
     final db = await _db;
     await db.transaction((txn) async {
       final rows = await txn.query(
         'products',
-        columns: ['current_stock'],
+        columns: ['current_stock', 'is_service'],
         where: 'id = ?',
         whereArgs: [productId],
         limit: 1,
       );
       if (rows.isEmpty) throw StateError('Item no longer exists.');
+      if ((rows.first['is_service'] as num).toInt() == 1) {
+        throw StateError('Service items do not have stock to adjust.');
+      }
       final currentStock = (rows.first['current_stock'] as num).toDouble();
+      if (!currentStock.isFinite) {
+        throw StateError('Current stock is invalid. Correct the item before adjusting it.');
+      }
       if (expectedCurrentStock != null && currentStock != expectedCurrentStock) {
         throw StockChangedException(currentStock);
       }
