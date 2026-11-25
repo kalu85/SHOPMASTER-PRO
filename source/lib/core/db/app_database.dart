@@ -34,6 +34,7 @@ class AppDatabase {
         await _createV2(d);
         await _createV3(d);
         await _upgradeToV4(d);
+        await _upgradeToV5(d);
       },
       onUpgrade: (d, oldVersion, newVersion) async {
         if (oldVersion < 2) await _createV2(d);
@@ -151,8 +152,7 @@ class AppDatabase {
         cgst REAL NOT NULL DEFAULT 0,
         sgst REAL NOT NULL DEFAULT 0,
         igst REAL NOT NULL DEFAULT 0,
-        amount REAL NOT NULL DEFAULT 0,
-        purchase_rate_snapshot REAL NOT NULL DEFAULT 0
+        amount REAL NOT NULL DEFAULT 0
       )
     ''');
     await d.execute(
