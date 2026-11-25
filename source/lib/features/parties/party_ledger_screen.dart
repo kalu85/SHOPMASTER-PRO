@@ -162,12 +162,30 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
   }
 
   Future<void> _reminder() async {
+    if (_party.phone.trim().isEmpty) {
+      _msg('Add a mobile number to this customer before preparing a reminder.');
+      return;
+    }
     final shop = await SettingsRepository.instance.load();
-    final msg =
-        'Hello ${_party.name}, this is a friendly reminder from ${shop.shopName}. '
-        'Your pending balance is ${inr.format(_party.currentBalance)}. '
-        'Please pay at your convenience. Thank you!';
-    final ok = await ContactService.whatsApp(_party.phone, msg);
+    final invoices =
+        await PartyRepository.instance.outstandingInvoices(_party.id!);
+    final details = invoices.map((row) {
+      final number = row['number'] as String? ?? '';
+      final date = prettyDate(row['invoice_date'] as String? ?? '');
+      final due = (row['due'] as num?)?.toDouble() ?? 0;
+      return '- $number ($date): ${inr.format(due)}';
+    }).join('\\n');
+    final msg = StringBuffer()
+      ..write('Hello ${_party.name}, this is a friendly payment reminder from ${shop.shopName}.\\n')
+      ..write('Your current account balance is ${inr.format(_party.currentBalance)}.');
+    if (details.isNotEmpty) {
+      msg
+        ..write('\\n\\nUnpaid invoices:')
+        ..write('\\n$details');
+    }
+    msg
+      ..write('\\n\\nPlease contact us if you have already paid or need a statement. Thank you!');
+    final ok = await ContactService.whatsApp(_party.phone, msg.toString());
     if (!ok && mounted) _msg('Could not open WhatsApp');
   }
 
