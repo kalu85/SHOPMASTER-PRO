@@ -61,6 +61,12 @@ jobs:
             if (ext != null) {
               try { ext.compileSdkVersion(36) } catch (Throwable t) { println "sdk36 skipped for ${p.name}: ${t.message}" }
             }
+            // Work around an Android Lint runtime crash in image_picker_android's release lint.
+            p.tasks.configureEach { task ->
+              if (task.name.toLowerCase().startsWith('lintvital')) {
+                task.enabled = false
+              }
+            }
           }
           EOF
           sed -i 's/^          //' ~/.gradle/init.d/sdk36.gradle
