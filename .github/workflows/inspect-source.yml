@@ -1,0 +1,22 @@
+name: Inspect SHOPMASTER source
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect bundled Flutter project
+        run: |
+          unzip -q shopmaster_pro_final_all_updates.zip -d work
+          cd work/shopmaster_pro
+          echo '=== FILES ==='
+          find lib -type f | sort
+          echo '=== PROFIT / PURCHASE REFERENCES ==='
+          grep -RniE 'purchase|buyPrice|costPrice|profit|salePrice|unitPrice|InvoiceLine|class Invoice|class Product' lib || true
+          echo '=== CORE MODELS AND REPOSITORIES ==='
+          for f in lib/core/db/app_database.dart lib/data/models/product.dart lib/data/models/invoice.dart lib/data/repositories/invoice_repository.dart lib/data/repositories/report_repository.dart; do
+            if [ -f "$f" ]; then echo "===== $f ====="; sed -n '1,260p' "$f"; fi
+          done
