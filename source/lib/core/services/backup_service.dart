@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:path/path.dart' as p;
+import 'package:sqflite/sqflite.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../data/settings_repository.dart';
@@ -88,15 +89,37 @@ class BackupService {
     if (await b.file.exists()) await b.file.delete();
   }
 
-  /// A real SQLite file starts with this 16-byte header.
+  /// Checks both the SQLite file signature and its internal page integrity.
+  /// A header-only check would accept truncated or corrupted database files.
   Future<bool> looksLikeDatabase(File f) async {
     if (!await f.exists()) return false;
-    final raf = await f.open();
+    Database? candidate;
     try {
-      final head = await raf.read(16);
-      return String.fromCharCodes(head) == 'SQLite format 3\u0000';
+      if (await f.length() < 100) return false;
+      final raf = await f.open();
+      late final List<int> head;
+      try {
+        head = await raf.read(16);
+      } finally {
+        await raf.close();
+      }
+      if (String.fromCharCodes(head) != 'SQLite format 3\u0000') {
+        return false;
+      }
+
+      // Open read-only so validation cannot alter the selected backup.
+      candidate = await databaseFactory.openDatabase(
+        f.path,
+        options: OpenDatabaseOptions(readOnly: true),
+      );
+      final result = await candidate.rawQuery('PRAGMA integrity_check');
+      return result.length == 1 &&
+          result.first.values.single?.toString().toLowerCase() == 'ok';
+    } catch (_) {
+      // Invalid, truncated, unsupported, or unreadable files are rejected.
+      return false;
     } finally {
-      await raf.close();
+      await candidate?.close();
     }
   }
 
