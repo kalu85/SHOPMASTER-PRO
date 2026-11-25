@@ -19,6 +19,8 @@ class DraftLine {
     this.gstRate = 0,
     this.serials = '',
     this.warrantyMonths = 0,
+    this.batchNumber = '',
+    this.expiryDate,
   });
 
   final Product? product;
@@ -34,6 +36,8 @@ class DraftLine {
   /// Serial numbers, one per line or comma separated.
   String serials;
   int warrantyMonths;
+  String batchNumber;
+  DateTime? expiryDate;
 
   DraftLine copy() => DraftLine(
         product: product,
@@ -45,6 +49,8 @@ class DraftLine {
         gstRate: gstRate,
         serials: serials,
         warrantyMonths: warrantyMonths,
+        batchNumber: batchNumber,
+        expiryDate: expiryDate,
       );
 }
 
@@ -55,6 +61,7 @@ Future<DraftLine?> showLineDialog(
   bool showSerials = false,
   bool showWarranty = false,
   bool showCost = false,
+  bool showExpiry = false,
 }) {
   return showDialog<DraftLine>(
     context: context,
@@ -64,6 +71,7 @@ Future<DraftLine?> showLineDialog(
       showSerials: showSerials,
       showWarranty: showWarranty,
       showCost: showCost,
+      showExpiry: showExpiry,
     ),
   );
 }
@@ -75,6 +83,7 @@ class _LineDialog extends StatefulWidget {
     required this.showSerials,
     required this.showWarranty,
     required this.showCost,
+    required this.showExpiry,
   });
 
   final DraftLine line;
@@ -84,6 +93,7 @@ class _LineDialog extends StatefulWidget {
 
   /// Show the item's buy price (sales screens only).
   final bool showCost;
+  final bool showExpiry;
 
   @override
   State<_LineDialog> createState() => _LineDialogState();
@@ -97,6 +107,8 @@ class _LineDialogState extends State<_LineDialog> {
   late final TextEditingController _discount;
   late final TextEditingController _serials;
   late final TextEditingController _customWarranty;
+  late final TextEditingController _batchNumber;
+  DateTime? _expiryDate;
   late int _gst;
   late int _warranty;
   bool _customW = false;
@@ -122,6 +134,8 @@ class _LineDialogState extends State<_LineDialog> {
     _customW = !_presets.contains(_warranty);
     _customWarranty =
         TextEditingController(text: _customW ? '$_warranty' : '');
+    _batchNumber = TextEditingController(text: l.batchNumber);
+    _expiryDate = l.expiryDate;
   }
 
   @override
@@ -133,6 +147,7 @@ class _LineDialogState extends State<_LineDialog> {
     _discount.dispose();
     _serials.dispose();
     _customWarranty.dispose();
+    _batchNumber.dispose();
     super.dispose();
   }
 
@@ -198,7 +213,9 @@ class _LineDialogState extends State<_LineDialog> {
       ..qty = qty
       ..rate = rate
       ..discount = disc
-      ..gstRate = _gst;
+      ..gstRate = _gst
+      ..batchNumber = widget.showExpiry ? _batchNumber.text.trim() : ''
+      ..expiryDate = widget.showExpiry ? _expiryDate : null;
     Navigator.of(context).pop(out);
   }
 
@@ -271,6 +288,27 @@ class _LineDialogState extends State<_LineDialog> {
                   ),
                 ],
               ),
+            ],
+            if (widget.showExpiry) ...[
+              const SizedBox(height: 12),
+              TextField(controller: _batchNumber, decoration: _dec('Batch / lot number (optional)')),
+              const SizedBox(height: 8),
+              OutlinedButton.icon(
+                onPressed: () async {
+                  final now = DateTime.now();
+                  final picked = await showDatePicker(
+                    context: context,
+                    initialDate: _expiryDate ?? DateTime(now.year + 1, now.month, now.day),
+                    firstDate: DateTime(2000),
+                    lastDate: DateTime(2100),
+                  );
+                  if (picked != null && mounted) setState(() => _expiryDate = picked);
+                },
+                icon: const Icon(Icons.event_available),
+                label: Text(_expiryDate == null ? 'Set expiry date' : 'Expiry: ${_expiryDate!.day.toString().padLeft(2, '0')}-${_expiryDate!.month.toString().padLeft(2, '0')}-${_expiryDate!.year}'),
+              ),
+              if (_expiryDate != null)
+                TextButton(onPressed: () => setState(() => _expiryDate = null), child: const Text('Clear expiry date')),
             ],
             if (widget.showSerials) ...[
               const SizedBox(height: 12),
