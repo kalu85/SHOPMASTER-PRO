@@ -62,4 +62,50 @@ void main() {
     expect(warrantyLabel(24), '2 years');
     expect(warrantyLabel(18), '18 months');
   });
+
+  group('purchaseReturnSerialError', () {
+    test('rejects a serial missing from the register', () {
+      expect(
+        purchaseReturnSerialError(
+          serial: 'SN-1', exists: false, status: 'in_stock'),
+        contains('not found'),
+      );
+    });
+    test('rejects sold and already returned serials', () {
+      expect(
+        purchaseReturnSerialError(
+          serial: 'SN-1', exists: true, status: 'sold'),
+        contains('sold'),
+      );
+      expect(
+        purchaseReturnSerialError(
+          serial: 'SN-1', exists: true, status: 'returned'),
+        contains('already returned'),
+      );
+    });
+    test('rejects a serial belonging to another product', () {
+      expect(
+        purchaseReturnSerialError(
+          serial: 'SN-1',
+          exists: true,
+          status: 'in_stock',
+          serialProductId: 10,
+          itemProductId: 11,
+        ),
+        contains('different item'),
+      );
+    });
+    test('accepts an in-stock serial for the matching product', () {
+      expect(
+        purchaseReturnSerialError(
+          serial: 'SN-1',
+          exists: true,
+          status: 'in_stock',
+          serialProductId: 10,
+          itemProductId: 10,
+        ),
+        isNull,
+      );
+    });
+  });
 }

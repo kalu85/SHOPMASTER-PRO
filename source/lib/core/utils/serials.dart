@@ -40,3 +40,31 @@ String warrantyLabel(int months) {
 
 /// Canonical comparison key for serial identifiers (case-insensitive).
 String serialKey(String serial) => serial.trim().toLowerCase();
+
+/// Returns a validation message for a purchase-return serial, or null when valid.
+/// A serial must exist, still be in stock, and belong to the selected product
+/// when both records have product IDs.
+String? purchaseReturnSerialError({
+  required String serial,
+  required bool exists,
+  required String status,
+  int? serialProductId,
+  int? itemProductId,
+}) {
+  if (!exists) return 'Serial "$serial" was not found in the serial register';
+  if (status == 'sold') {
+    return 'Serial "$serial" is sold and cannot be returned to the supplier';
+  }
+  if (status == 'returned') {
+    return 'Serial "$serial" was already returned to the supplier';
+  }
+  if (status != 'in_stock') {
+    return 'Serial "$serial" is not available for purchase return';
+  }
+  if (serialProductId != null &&
+      itemProductId != null &&
+      serialProductId != itemProductId) {
+    return 'Serial "$serial" belongs to a different item';
+  }
+  return null;
+}

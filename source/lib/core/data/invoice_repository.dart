@@ -409,15 +409,18 @@ class InvoiceRepository {
         );
       }
     } else {
-      // Purchase return: item goes back to the supplier.
-      if (row != null) {
-        if (row['status'] == 'sold') {
-          throw SerialException(
-              'Serial "$serial" is sold and cannot be returned to the supplier');
-        }
-        await txn.update('serials', {'status': 'returned'},
-            where: 'id = ?', whereArgs: [row['id']]);
-      }
+      // Purchase return: only a known, in-stock serial for this product may
+      // be returned. Unknown serials must not silently pass without tracking.
+      final error = purchaseReturnSerialError(
+        serial: serial,
+        exists: row != null,
+        status: row?['status'] as String? ?? '',
+        serialProductId: row?['product_id'] as int?,
+        itemProductId: it.productId,
+      );
+      if (error != null) throw SerialException(error);
+      await txn.update('serials', {'status': 'returned'},
+          where: 'id = ?', whereArgs: [row!['id']]);
     }
   }
 
