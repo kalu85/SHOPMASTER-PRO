@@ -8,6 +8,7 @@ import '../../core/widgets/confirm_dialog.dart';
 import 'adjust_stock_dialog.dart';
 import 'product_form_screen.dart';
 import 'stock_history_screen.dart';
+import 'smart_inventory_card.dart';
 
 /// Items and Stock module (amber department colour).
 class StockScreen extends StatefulWidget {
@@ -154,25 +155,30 @@ class _StockScreenState extends State<StockScreen> {
       );
     }
     if (_items.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Text(
-            _search.text.isEmpty
-                ? 'No items yet. Tap "Add item" to create your first product.'
-                : 'No items match your search.',
-            textAlign: TextAlign.center,
-            style: const TextStyle(color: AppColors.textMuted),
+      return ListView(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
+        children: [
+          const SmartInventoryCard(),
+          Padding(
+            padding: const EdgeInsets.all(24),
+            child: Text(
+              _search.text.isEmpty
+                  ? 'No items yet. Tap "Add item" to create your first product.'
+                  : 'No items match your search.',
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: AppColors.textMuted),
+            ),
           ),
-        ),
+        ],
       );
     }
     return ListView.separated(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
-      itemCount: _items.length,
+      itemCount: _items.length + 1,
       separatorBuilder: (_, __) => const SizedBox(height: 8),
       itemBuilder: (context, i) {
-        final p = _items[i];
+        if (i == 0) return const SmartInventoryCard();
+        final p = _items[i - 1];
         return Card(
           child: ListTile(
             onTap: () => _openForm(p),
