@@ -353,6 +353,56 @@ class _InvoiceFormScreenState extends State<InvoiceFormScreen> {
     }
   }
 
+  Future<bool> _confirmStockShortages() async {
+    if (!_isSale || widget.docType != DocType.invoice || _editing) return true;
+    final requiredByProduct = <int, double>{};
+    final productById = <int, Product>{};
+    for (final line in _lines) {
+      final product = line.product;
+      if (product == null || product.isService || product.id == null) continue;
+      final id = product.id!;
+      requiredByProduct[id] = (requiredByProduct[id] ?? 0) + line.qty;
+      productById[id] = product;
+    }
+    final shortages = <String>[];
+    for (final entry in requiredByProduct.entries) {
+      final product = productById[entry.key]!;
+      if (entry.value > product.currentStock) {
+        shortages.add('${product.name}: need ${fmtQty(entry.value)}, available ${fmtQty(product.currentStock)}');
+      }
+    }
+    if (shortages.isEmpty) return true;
+    if (!mounted) return false;
+    final proceed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Insufficient stock'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('This sale will make the following stock quantities negative:'),
+              const SizedBox(height: 10),
+              for (final shortage in shortages)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Text('• $shortage'),
+                ),
+              const SizedBox(height: 4),
+              const Text('Do you want to save this sale anyway?'),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Review items')),
+          FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Save anyway')),
+        ],
+      ),
+    );
+    return proceed == true;
+  }
+
   Future<void> _save() async {
     final t = _totals;
     final error = _validate(t);
@@ -360,6 +410,7 @@ class _InvoiceFormScreenState extends State<InvoiceFormScreen> {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error)));
       return;
     }
+    if (!await _confirmStockShortages() || !mounted) return;
     setState(() => _saving = true);
     final paid = _isQuotation ? 0.0 : _paidValue;
     final party = _party;
