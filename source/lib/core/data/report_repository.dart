@@ -640,6 +640,20 @@ class ReportRepository {
       final sign = inv['doc_type'] == 'return' ? -1.0 : 1.0;
       out.add(['PURCHASE REGISTER', inv['invoice_date'] as String? ?? '', '${inv['number']} / ${inv['party_name']}', money(sign * _d(inv['taxable_total'])), 'GSTIN ${inv['party_gstin'] ?? ''}; GST ${money(sign * (_d(inv['cgst']) + _d(inv['sgst']) + _d(inv['igst'])))}']);
     }
+    // Invoice-wise line detail lets the CA trace each HSN amount back to its
+    // source document. Returns are shown with negative values.
+    for (final row in items) {
+      final sign = row['doc_type'] == 'return' ? -1.0 : 1.0;
+      final hsn = (row['hsn'] as String? ?? '').trim();
+      final gstin = (row['party_gstin'] as String? ?? '').trim();
+      out.add([
+        'INVOICE HSN DETAIL',
+        row['invoice_date'] as String? ?? '',
+        '${row['number']} / ${row['party_name']} / ${row['item_name']}',
+        money(sign * _d(row['taxable'])),
+        '${row['kind'] == 'sale' ? 'Sales' : 'Purchase'}; HSN ${hsn.isEmpty ? 'MISSING' : hsn}; Rate ${row['gst_rate'] ?? 0}%; GSTIN ${gstin.isEmpty ? 'blank' : gstin}; CGST ${money(sign * _d(row['cgst']))}; SGST ${money(sign * _d(row['sgst']))}; IGST ${money(sign * _d(row['igst']))}',
+      ]);
+    }
     for (final inv in invoices.where((r) => (r['is_gst'] as num).toInt() == 1)) {
       final gstin = (inv['party_gstin'] as String? ?? '').trim();
       final number = inv['number'] as String? ?? '';
