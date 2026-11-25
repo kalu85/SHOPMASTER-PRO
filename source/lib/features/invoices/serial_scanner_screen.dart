@@ -72,42 +72,52 @@ class _SerialScannerScreenState extends State<SerialScannerScreen>
   @override
   Widget build(BuildContext context) => Scaffold(
         appBar: AppBar(title: const Text('Scan serial number')),
-        body: MobileScanner(
-          controller: _controller,
-          onDetect: _onDetect,
-          errorBuilder: (context, error) {
-            final details = _startError ??
-                '${error.errorCode.name}: ${error.errorDetails?.message ?? 'No additional details'}';
-            return Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.camera_alt_outlined, size: 48),
-                    const SizedBox(height: 16),
-                    const Text(
-                      'Camera could not start',
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        body: Stack(
+          fit: StackFit.expand,
+          children: [
+            MobileScanner(
+              controller: _controller,
+              onDetect: _onDetect,
+            ),
+            if (_startError != null)
+              Center(
+                child: Card(
+                  margin: const EdgeInsets.all(24),
+                  child: Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.camera_alt_outlined, size: 44),
+                        const SizedBox(height: 12),
+                        const Text(
+                          'Camera could not start',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        SelectableText(
+                          _startError!,
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 16),
+                        FilledButton.icon(
+                          onPressed: _restart,
+                          icon: const Icon(Icons.refresh),
+                          label: const Text('Try camera again'),
+                        ),
+                        TextButton(
+                          onPressed: () => Navigator.of(context).pop(),
+                          child: const Text('Close scanner'),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 8),
-                    Text(details, textAlign: TextAlign.center),
-                    const SizedBox(height: 16),
-                    FilledButton.icon(
-                      onPressed: _restart,
-                      icon: const Icon(Icons.refresh),
-                      label: const Text('Try camera again'),
-                    ),
-                    const SizedBox(height: 8),
-                    TextButton(
-                      onPressed: () => Navigator.of(context).pop(),
-                      child: const Text('Close scanner'),
-                    ),
-                  ],
+                  ),
                 ),
               ),
-            );
-          },
+          ],
         ),
       );
 }
