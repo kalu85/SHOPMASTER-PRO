@@ -441,6 +441,8 @@ class InvoiceRepository {
     InvoiceKind kind,
     DocType docType, {
     String query = '',
+    int limit = 101,
+    int offset = 0,
   }) async {
     final db = await _db;
     final q = query.trim();
@@ -455,7 +457,8 @@ class InvoiceRepository {
         if (q.isNotEmpty) ...List.filled(3, '%$q%'),
       ],
       orderBy: 'id DESC',
-      limit: 300,
+      limit: limit,
+      offset: offset,
     );
     return rows.map(Invoice.fromMap).toList();
   }
