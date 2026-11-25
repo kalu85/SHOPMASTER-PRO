@@ -217,6 +217,12 @@ class _QuickActions extends StatelessWidget {
             icon: const Icon(Icons.add_rounded),
             label: const Text('New Purchase'),
           ),
+          OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(foregroundColor: AppColors.white, side: const BorderSide(color: AppColors.cyan)),
+            onPressed: () => onOpenModule('help'),
+            icon: const Icon(Icons.support_agent_rounded),
+            label: const Text('How to use app'),
+          ),
         ],
       ),
     );
