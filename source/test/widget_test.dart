@@ -5,9 +5,9 @@ import 'package:shopmaster_pro/core/utils/validators.dart';
 import 'package:shopmaster_pro/main.dart';
 
 void main() {
-  test('all 15 modules from the brief are registered', () {
-    expect(appModules.length, 15);
-    expect(appModules.map((m) => m.id).toSet().length, 15);
+  test('all 16 modules including the shop owner guide are registered', () {
+    expect(appModules.length, 16);
+    expect(appModules.map((m) => m.id).toSet().length, 16);
   });
 
   group('Product stock status', () {
