@@ -1,6 +1,8 @@
 name: Inspect SHOPMASTER profit implementation
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
 jobs:
   inspect:
     runs-on: ubuntu-latest
