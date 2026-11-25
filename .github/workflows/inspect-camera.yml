@@ -3,8 +3,6 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-  push:
-    branches: [main]
 jobs:
   inspect:
     runs-on: ubuntu-latest
