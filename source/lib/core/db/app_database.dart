@@ -25,7 +25,7 @@ class AppDatabase {
     if (existing != null) return existing;
     final opened = await openDatabase(
       await path,
-      version: 6,
+      version: 7,
       onConfigure: (d) async {
         await d.execute('PRAGMA foreign_keys = ON');
       },
@@ -36,6 +36,7 @@ class AppDatabase {
         await _upgradeToV4(d);
         await _upgradeToV5(d);
         await _upgradeToV6(d);
+        await _upgradeToV7(d);
       },
       onUpgrade: (d, oldVersion, newVersion) async {
         if (oldVersion < 2) await _createV2(d);
@@ -43,6 +44,7 @@ class AppDatabase {
         if (oldVersion < 4) await _upgradeToV4(d);
         if (oldVersion < 5) await _upgradeToV5(d);
         if (oldVersion < 6) await _upgradeToV6(d);
+        if (oldVersion < 7) await _upgradeToV7(d);
       },
     );
     _db = opened;
@@ -167,6 +169,13 @@ class AppDatabase {
         value INTEGER NOT NULL
       )
     ''');
+  }
+
+  /// v7: store batch and expiry details on purchase invoice lines.
+  Future<void> _upgradeToV7(Database d) async {
+    await d.execute("ALTER TABLE invoice_items ADD COLUMN batch_number TEXT NOT NULL DEFAULT ''");
+    await d.execute('ALTER TABLE invoice_items ADD COLUMN expiry_date TEXT');
+    await d.execute('CREATE INDEX idx_invoice_items_expiry ON invoice_items(expiry_date)');
   }
 
   /// v6: attach supplier bill files to purchase documents.
