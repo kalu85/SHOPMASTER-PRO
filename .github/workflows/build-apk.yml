@@ -28,6 +28,22 @@ jobs:
         working-directory: source
         run: flutter create --platforms=android --project-name shopmaster_pro --org com.shopmaster .
 
+      - name: Ensure Android camera permission
+        working-directory: source
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('android/app/src/main/AndroidManifest.xml')
+          s = p.read_text()
+          permission = '    <uses-permission android:name="android.permission.CAMERA" />\\n'
+          if 'android.permission.CAMERA' not in s:
+              s = s.replace('<manifest ', '<manifest ', 1)
+              end = s.find('>') + 1
+              s = s[:end] + '\\n' + permission + s[end:]
+              p.write_text(s)
+          print(p.read_text())
+          PY
+
       - name: Get packages
         working-directory: source
         run: flutter pub get
