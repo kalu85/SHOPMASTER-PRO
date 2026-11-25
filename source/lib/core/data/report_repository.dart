@@ -8,6 +8,7 @@ enum ReportType {
   salesSummary,
   purchaseSummary,
   gst,
+  gstReadiness,
   nonGst,
   profitLoss,
   stock,
@@ -41,6 +42,7 @@ const List<ReportInfo> kReports = [
       ReportType.purchaseSummary, 'Purchases (daily / monthly / yearly)', true,
       grouped: true),
   ReportInfo(ReportType.gst, 'GST report', true),
+  ReportInfo(ReportType.gstReadiness, 'CA preparation & GST data checks', true),
   ReportInfo(ReportType.nonGst, 'NON-GST report', true),
   ReportInfo(ReportType.profitLoss, 'Profit and loss', true),
   ReportInfo(ReportType.stock, 'Stock report', false),
@@ -116,6 +118,8 @@ class ReportRepository {
         return _summary(InvoiceKind.purchase, from, to, group);
       case ReportType.gst:
         return _gst(from, to);
+      case ReportType.gstReadiness:
+        return _gstReadiness(from, to);
       case ReportType.nonGst:
         return _nonGst(from, to);
       case ReportType.profitLoss:
@@ -287,6 +291,151 @@ class ReportRepository {
         'GST collected on sales (output): ${money(outGst)}',
         'GST paid on purchases (input): ${money(inGst)}',
         'Net GST payable: ${money(outGst - inGst)}',
+      ],
+    );
+  }
+
+  /// CA preparation report: HSN-wise tax totals plus data-quality items to
+  /// review. This is an internal working paper, not a GST return or filing.
+  Future<ReportData> _gstReadiness(String from, String to) async {
+    final db = await _db;
+    final rows = await db.rawQuery('''
+      SELECT i.kind, i.doc_type, i.number, i.invoice_date, i.party_name,
+        i.party_gstin, i.is_gst, ii.name AS item_name, ii.hsn, ii.gst_rate,
+        ii.taxable, ii.cgst, ii.sgst, ii.igst
+      FROM invoices i
+      JOIN invoice_items ii ON ii.invoice_id = i.id
+      WHERE i.doc_type != 'quotation'
+        AND i.invoice_date BETWEEN ? AND ?
+      ORDER BY i.invoice_date, i.number, ii.id
+    ''', [from, to]);
+
+    final grouped = <String, Map<String, Object?>>{};
+    final review = <List<String>>[];
+    var outputTax = 0.0;
+    var purchaseTax = 0.0;
+    var nonGstDocuments = <String>{};
+    var nonGstValue = 0.0;
+    var missingHsn = 0;
+    var blankPartyGstin = 0;
+
+    for (final row in rows) {
+      final isSale = row['kind'] == 'sale';
+      final isReturn = row['doc_type'] == 'return';
+      final sign = isReturn ? -1.0 : 1.0;
+      final isGst = (row['is_gst'] as num).toInt() == 1;
+      final number = row['number'] as String? ?? '';
+      final itemName = row['item_name'] as String? ?? '';
+      final hsn = (row['hsn'] as String? ?? '').trim();
+      final rate = (row['gst_rate'] as num?)?.toInt() ?? 0;
+      final taxable = sign * _d(row['taxable']);
+      final cgst = sign * _d(row['cgst']);
+      final sgst = sign * _d(row['sgst']);
+      final igst = sign * _d(row['igst']);
+      final gst = cgst + sgst + igst;
+
+      if (!isGst) {
+        nonGstDocuments.add(number);
+        nonGstValue += sign * _d(row['taxable']);
+        continue;
+      }
+
+      if (isSale) {
+        outputTax += gst;
+      } else {
+        purchaseTax += gst;
+      }
+
+      if (hsn.isEmpty) {
+        missingHsn++;
+        review.add([
+          'REVIEW',
+          number,
+          '$itemName: HSN is blank on a GST document; confirm the correct HSN',
+          '',
+          '',
+          '',
+          '',
+        ]);
+      } else {
+        final key = '${row['kind']}|$hsn|$rate';
+        final item = grouped.putIfAbsent(key, () => {
+              'kind': row['kind'],
+              'hsn': hsn,
+              'rate': rate,
+              'taxable': 0.0,
+              'cgst': 0.0,
+              'sgst': 0.0,
+              'igst': 0.0,
+            });
+        item['taxable'] = (item['taxable'] as double) + taxable;
+        item['cgst'] = (item['cgst'] as double) + cgst;
+        item['sgst'] = (item['sgst'] as double) + sgst;
+        item['igst'] = (item['igst'] as double) + igst;
+      }
+
+      final gstin = (row['party_gstin'] as String? ?? '').trim();
+      if (gstin.isEmpty) {
+        blankPartyGstin++;
+        review.add([
+          'REVIEW',
+          number,
+          'Party GSTIN is blank; confirm whether this is B2C or GSTIN details are needed',
+          '',
+          '',
+          '',
+          '',
+        ]);
+      }
+    }
+
+    final productsWithoutHsn = await db.rawQuery('''
+      SELECT name FROM products
+      WHERE is_service = 0 AND TRIM(COALESCE(hsn, '')) = ''
+      ORDER BY name COLLATE NOCASE
+    ''');
+    for (final product in productsWithoutHsn) {
+      review.add([
+        'CATALOG REVIEW',
+        product['name'] as String? ?? '',
+        'Product HSN is blank; confirm whether HSN applies and record it',
+        '',
+        '',
+        '',
+        '',
+      ]);
+    }
+
+    final out = <List<String>>[
+      for (final item in grouped.values)
+        [
+          'HSN SUMMARY',
+          '${item['hsn']} / ${item['rate']}%',
+          item['kind'] == 'sale' ? 'Sales (returns deducted)' : 'Purchases (returns deducted)',
+          money(item['taxable'] as double),
+          money(item['cgst'] as double),
+          money(item['sgst'] as double),
+          money(item['igst'] as double),
+        ],
+      ...review,
+    ];
+
+    return ReportData(
+      title: 'CA preparation & GST data checks ($from to $to)',
+      columns: const [
+        'Section', 'Document / HSN', 'Details', 'Taxable', 'CGST', 'SGST', 'IGST',
+      ],
+      rows: out,
+      summary: [
+        'Output GST on recorded GST sales: ${money(outputTax)}',
+        'Input GST recorded on purchases (eligibility must be checked by CA): ${money(purchaseTax)}',
+        'Difference before CA adjustments: ${money(outputTax - purchaseTax)}',
+        'GST document lines with missing HSN: $missingHsn',
+        'GST document lines with blank party GSTIN (check B2B/B2C): $blankPartyGstin',
+        'Products without HSN in item catalogue: ${productsWithoutHsn.length}',
+        'Non-GST documents in selected period: ${nonGstDocuments.length}; taxable base recorded: ${money(nonGstValue)}',
+        'Returns are deducted from their respective sales or purchase totals.',
+        'Working paper only: not an official GSTR-1 / GSTR-3B return. CA must verify classification, exemptions, ITC eligibility and filing.',
       ],
     );
   }
