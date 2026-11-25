@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:file_picker/file_picker.dart';
+import '../../core/data/invoice_attachment_repository.dart';
 
 import '../../core/data/account_repository.dart';
 import '../../core/data/invoice_repository.dart';
@@ -50,6 +52,7 @@ class _InvoiceFormScreenState extends State<InvoiceFormScreen> {
   bool _saving = false;
   List<Account> _accounts = [];
   int? _accountId;
+  final List<PlatformFile> _purchaseBillFiles = [];
 
   bool get _isSale => widget.kind == InvoiceKind.sale;
   bool get _isQuotation => widget.docType == DocType.quotation;
@@ -257,6 +260,17 @@ class _InvoiceFormScreenState extends State<InvoiceFormScreen> {
     return null;
   }
 
+  Future<void> _pickPurchaseBills() async {
+    final result = await FilePicker.platform.pickFiles(
+      allowMultiple: true, type: FileType.custom,
+      allowedExtensions: ['jpg', 'jpeg', 'png', 'webp', 'pdf'],
+      withData: false,
+    );
+    if (result != null && mounted) {
+      setState(() => _purchaseBillFiles.addAll(result.files));
+    }
+  }
+
   Future<void> _save() async {
     final t = _totals;
     final error = _validate(t);
@@ -352,6 +366,13 @@ class _InvoiceFormScreenState extends State<InvoiceFormScreen> {
         number = widget.existing!.number;
       } else {
         number = await InvoiceRepository.instance.create(invoice, items);
+      }
+      final savedInvoice = _editing
+          ? widget.existing!
+          : await InvoiceRepository.instance.byNumber(widget.kind, widget.docType, number);
+      if (savedInvoice?.id != null && _purchaseBillFiles.isNotEmpty) {
+        await InvoiceAttachmentRepository.instance.addFiles(savedInvoice!.id!, _purchaseBillFiles);
+        _purchaseBillFiles.clear();
       }
       if (!mounted) return;
       var msg = _editing ? 'Updated $number' : 'Saved $number';
@@ -550,6 +571,32 @@ class _InvoiceFormScreenState extends State<InvoiceFormScreen> {
                   onChanged: (v) => setState(() => _interstate = v),
                 ),
               const SizedBox(height: 8),
+              if (_isPurchaseInvoice) ...[
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Row(children: [
+                        const Icon(Icons.attach_file_rounded),
+                        const SizedBox(width: 8),
+                        const Expanded(child: Text('Supplier bill attachments', style: TextStyle(fontWeight: FontWeight.w700))),
+                        OutlinedButton.icon(onPressed: _pickPurchaseBills, icon: const Icon(Icons.add_rounded), label: const Text('Add files')),
+                      ]),
+                      if (_purchaseBillFiles.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        for (var i = 0; i < _purchaseBillFiles.length; i++)
+                          ListTile(dense: true, contentPadding: EdgeInsets.zero,
+                            leading: Icon(_purchaseBillFiles[i].extension?.toLowerCase() == 'pdf' ? Icons.picture_as_pdf : Icons.image),
+                            title: Text(_purchaseBillFiles[i].name, maxLines: 1, overflow: TextOverflow.ellipsis),
+                            trailing: IconButton(icon: const Icon(Icons.close), onPressed: () => setState(() => _purchaseBillFiles.removeAt(i))),
+                          ),
+                      ],
+                      const Text('Photos and PDFs are copied into the app and linked to this purchase invoice.', style: TextStyle(fontSize: 12)),
+                    ]),
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
               // Items
               Row(
                 children: [
