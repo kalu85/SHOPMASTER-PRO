@@ -62,8 +62,6 @@ void main() {
     expect(warrantyLabel(24), '2 years');
     expect(warrantyLabel(18), '18 months');
   });
-}
-
 
   group('purchaseReturnSerialError', () {
     test('rejects a serial missing from the register', () {
@@ -110,3 +108,4 @@ void main() {
       );
     });
   });
+}
