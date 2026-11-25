@@ -15,9 +15,10 @@ import '../../core/utils/format.dart';
 /// and email. Nothing is sent automatically: the share sheet / chat opens
 /// and the person taps send.
 class InvoicePdfScreen extends StatefulWidget {
-  const InvoicePdfScreen({super.key, required this.invoice});
+  const InvoicePdfScreen({super.key, required this.invoice, this.autoShareOnOpen = false});
 
   final Invoice invoice;
+  final bool autoShareOnOpen;
 
   @override
   State<InvoicePdfScreen> createState() => _InvoicePdfScreenState();
@@ -29,6 +30,7 @@ class _InvoicePdfScreenState extends State<InvoicePdfScreen> {
   List<InvoiceItem>? _items;
   String? _error;
   Uint8List? _bytes;
+  bool _autoShareStarted = false;
 
   @override
   void initState() {
@@ -43,6 +45,10 @@ class _InvoicePdfScreenState extends State<InvoicePdfScreen> {
       _shop = shop;
       _items = items;
       await _render();
+      if (widget.autoShareOnOpen && mounted && !_autoShareStarted) {
+        _autoShareStarted = true;
+        await _share();
+      }
     } catch (e) {
       if (mounted) setState(() => _error = '$e');
     }
