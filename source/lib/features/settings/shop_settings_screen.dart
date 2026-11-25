@@ -6,6 +6,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import '../../core/data/settings_repository.dart';
+import 'security_settings_card.dart';
 import '../../core/models/invoice.dart' show kPayModes;
 
 /// Shop profile used on every invoice, plus a few defaults.
@@ -167,6 +168,8 @@ class _ShopSettingsScreenState extends State<ShopSettingsScreen> {
                 ),
               ],
             ),
+            const SizedBox(height: 16),
+            const SecuritySettingsCard(),
             const SizedBox(height: 16),
             TextField(controller: _name, decoration: _dec('Shop name')),
             const SizedBox(height: 12),
