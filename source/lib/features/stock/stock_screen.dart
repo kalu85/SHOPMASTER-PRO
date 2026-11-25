@@ -9,6 +9,7 @@ import 'adjust_stock_dialog.dart';
 import 'product_form_screen.dart';
 import 'stock_history_screen.dart';
 import 'smart_inventory_card.dart';
+import 'expiry_batches_screen.dart';
 
 /// Items and Stock module (amber department colour).
 class StockScreen extends StatefulWidget {
@@ -133,6 +134,17 @@ class _StockScreenState extends State<StockScreen> {
                       borderRadius: BorderRadius.circular(12),
                       borderSide: BorderSide.none,
                     ),
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: OutlinedButton.icon(
+                    onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ExpiryBatchesScreen())),
+                    icon: const Icon(Icons.event_busy_rounded),
+                    label: const Text('Batch expiry tracker'),
                   ),
                 ),
               ),
