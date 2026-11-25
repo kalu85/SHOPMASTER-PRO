@@ -87,9 +87,17 @@ class _AdjustStockDialogState extends State<_AdjustStockDialog> {
         change: change,
         reason: _reason,
         note: _note.text.trim(),
+        expectedCurrentStock: widget.product.currentStock,
       );
       if (!mounted) return;
       Navigator.of(context).pop(true);
+    } on StockChangedException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _saving = false;
+        _error = 'Stock changed while this screen was open. Current stock is '
+            '${fmtQty(e.currentStock)}. Close and reopen the adjustment to review the latest quantity.';
+      });
     } catch (e) {
       if (!mounted) return;
       setState(() {
