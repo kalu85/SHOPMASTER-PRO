@@ -157,7 +157,9 @@ class _LineDialogState extends State<_LineDialog> {
     );
     if (value == null || !mounted) return;
     final current = parseSerials(_serials.text);
-    if (!current.contains(value)) current.add(value);
+    if (!current.any((serial) => serialKey(serial) == serialKey(value))) {
+      current.add(value);
+    }
     _serials.text = current.join(', ');
   }
 
@@ -192,7 +194,7 @@ class _LineDialogState extends State<_LineDialog> {
             'You entered ${serialList.length} serial number(s) but quantity is ${qty.toInt()}');
         return;
       }
-      if (serialList.toSet().length != serialList.length) {
+      if (serialList.map(serialKey).toSet().length != serialList.length) {
         setState(() => _error = 'The same serial number is typed twice');
         return;
       }
