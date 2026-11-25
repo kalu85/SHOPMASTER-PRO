@@ -39,7 +39,7 @@ class _SmartInventoryCardState extends State<SmartInventoryCard> {
         SELECT product_id, SUM(-qty_change) AS sold
         FROM stock_movements
         WHERE qty_change < 0 AND reason LIKE 'Sale%'
-          AND created_at >= datetime('now', '-30 days')
+          AND substr(created_at, 1, 10) >= date('now', '-30 days')
         GROUP BY product_id
       """);
       final sold30 = <int, double>{
@@ -69,7 +69,7 @@ class _SmartInventoryCardState extends State<SmartInventoryCard> {
           final sold = sold30[p.id] ?? 0;
           final target = (p.minStock * 2).clamp(
               p.minStock, p.minStock + sold);
-          final qty = (target - p.currentStock).clamp(0, double.infinity);
+          final qty = (target - p.currentStock).clamp(0, double.infinity).toDouble();
           final supplier = p.supplierName.trim().isEmpty
               ? 'Supplier not assigned'
               : p.supplierName.trim();
