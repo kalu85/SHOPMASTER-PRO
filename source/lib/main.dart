@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'core/services/backup_service.dart';
+import 'core/services/app_lock_gate.dart';
 import 'core/theme/app_theme.dart';
 import 'features/shell/app_shell.dart';
 
@@ -20,7 +21,7 @@ class ShopMasterApp extends StatelessWidget {
       title: 'SHOPMASTER PRO',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light(),
-      home: const AppShell(),
+      home: const AppLockGate(child: AppShell()),
     );
   }
 }
