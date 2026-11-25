@@ -114,7 +114,7 @@ class _SerialDetailScreenState extends State<SerialDetailScreen> {
 
   Future<void> _closeClaim(WarrantyClaim claim) async {
     final c = TextEditingController(text: claim.resolution);
-    String status = 'resolved';
+    String status = claim.status;
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => StatefulBuilder(
