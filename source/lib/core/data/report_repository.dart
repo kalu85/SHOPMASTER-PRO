@@ -14,6 +14,7 @@ enum ReportType {
   lowStock,
   customerOutstanding,
   supplierOutstanding,
+  outstandingAgeing,
   cash,
   bank,
   expenses,
@@ -46,6 +47,7 @@ const List<ReportInfo> kReports = [
   ReportInfo(ReportType.lowStock, 'Low-stock report', false),
   ReportInfo(ReportType.customerOutstanding, 'Customer outstanding', false),
   ReportInfo(ReportType.supplierOutstanding, 'Supplier outstanding', false),
+  ReportInfo(ReportType.outstandingAgeing, 'Outstanding ageing', false),
   ReportInfo(ReportType.cash, 'Cash report', true),
   ReportInfo(ReportType.bank, 'Bank report', true),
   ReportInfo(ReportType.expenses, 'Expense report', true),
@@ -126,6 +128,8 @@ class ReportRepository {
         return _outstanding('customer');
       case ReportType.supplierOutstanding:
         return _outstanding('supplier');
+      case ReportType.outstandingAgeing:
+        return _outstandingAgeing();
       case ReportType.cash:
         return _accountReport('cash', from, to);
       case ReportType.bank:
@@ -137,6 +141,52 @@ class ReportRepository {
       case ReportType.serials:
         return _serials();
     }
+  }
+
+  /// Groups unpaid invoices by age, using invoice date as the due-age proxy.
+  /// The app does not currently store contractual due dates.
+  Future<ReportData> _outstandingAgeing() async {
+    final db = await _db;
+    final today = DateTime.now();
+    final rows = await db.rawQuery('''
+      SELECT kind, number, party_name, invoice_date, due
+      FROM invoices
+      WHERE doc_type = 'invoice' AND due > 0.009
+      ORDER BY invoice_date ASC, id ASC
+    ''');
+    final out = <List<String>>[];
+    var current = 0.0, d30 = 0.0, d60 = 0.0, d90 = 0.0, total = 0.0;
+    for (final row in rows) {
+      final date = DateTime.tryParse(row['invoice_date'] as String? ?? '');
+      final age = date == null ? 0 : today.difference(date).inDays;
+      final due = _d(row['due']);
+      final bucket = age <= 30 ? '0-30 days' : age <= 60 ? '31-60 days' : age <= 90 ? '61-90 days' : 'Over 90 days';
+      if (age <= 30) { current += due; }
+      else if (age <= 60) { d30 += due; }
+      else if (age <= 90) { d60 += due; }
+      else { d90 += due; }
+      total += due;
+      out.add([
+        row['kind'] == 'sale' ? 'Customer' : 'Supplier',
+        row['number'] as String? ?? '',
+        row['party_name'] as String? ?? '',
+        row['invoice_date'] as String? ?? '',
+        age < 0 ? 'Future dated' : bucket,
+        money(due),
+      ]);
+    }
+    return ReportData(
+      title: 'Outstanding ageing (age from invoice date)',
+      columns: const ['Type', 'Invoice', 'Party', 'Invoice date', 'Age bucket', 'Due'],
+      rows: out,
+      summary: [
+        '0-30 days: ${money(current)}',
+        '31-60 days: ${money(d30)}',
+        '61-90 days: ${money(d60)}',
+        'Over 90 days: ${money(d90)}',
+        'Total outstanding: ${money(total)}',
+      ],
+    );
   }
 
   Future<ReportData> _summary(
