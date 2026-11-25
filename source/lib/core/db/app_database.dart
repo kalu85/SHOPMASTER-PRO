@@ -25,7 +25,7 @@ class AppDatabase {
     if (existing != null) return existing;
     final opened = await openDatabase(
       await path,
-      version: 5,
+      version: 6,
       onConfigure: (d) async {
         await d.execute('PRAGMA foreign_keys = ON');
       },
@@ -35,12 +35,14 @@ class AppDatabase {
         await _createV3(d);
         await _upgradeToV4(d);
         await _upgradeToV5(d);
+        await _upgradeToV6(d);
       },
       onUpgrade: (d, oldVersion, newVersion) async {
         if (oldVersion < 2) await _createV2(d);
         if (oldVersion < 3) await _upgradeToV3(d);
         if (oldVersion < 4) await _upgradeToV4(d);
         if (oldVersion < 5) await _upgradeToV5(d);
+        if (oldVersion < 6) await _upgradeToV6(d);
       },
     );
     _db = opened;
@@ -165,6 +167,18 @@ class AppDatabase {
         value INTEGER NOT NULL
       )
     ''');
+  }
+
+  /// v6: attach supplier bill files to purchase documents.
+  Future<void> _upgradeToV6(Database d) async {
+    await d.execute('''CREATE TABLE invoice_attachments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      invoice_id INTEGER NOT NULL REFERENCES invoices(id) ON DELETE CASCADE,
+      file_name TEXT NOT NULL,
+      file_path TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    )''');
+    await d.execute('CREATE INDEX idx_invoice_attachments_invoice ON invoice_attachments(invoice_id)');
   }
 
   /// v5: preserve each item's purchase cost at the time of sale.
