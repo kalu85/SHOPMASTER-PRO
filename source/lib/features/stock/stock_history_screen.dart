@@ -1,4 +1,9 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../core/data/product_repository.dart';
 import '../../core/models/product.dart';
@@ -44,6 +49,46 @@ class _StockHistoryScreenState extends State<StockHistoryScreen> {
               )));
       return directionMatches && rangeMatches;
     }).toList();
+  }
+
+  String _csvCell(Object? value) {
+    final text = value?.toString() ?? '';
+    return '"${text.replaceAll('"', '""')}"';
+  }
+
+  Future<void> _exportCsv(List<StockMovement> rows) async {
+    final lines = <String>[
+      ['Product', 'Date', 'Movement type', 'Quantity change', 'Reason', 'Note']
+          .map(_csvCell)
+          .join(','),
+      for (final movement in rows)
+        [
+          widget.product.name,
+          movement.createdAt.toIso8601String(),
+          movement.qtyChange > 0
+              ? 'Stock in'
+              : movement.qtyChange < 0
+                  ? 'Stock out'
+                  : 'No change',
+          movement.qtyChange,
+          movement.reason,
+          movement.note,
+        ].map(_csvCell).join(','),
+    ];
+    final directory = await getTemporaryDirectory();
+    final safeName = widget.product.name
+        .replaceAll(RegExp(r'[^A-Za-z0-9_-]+'), '_')
+        .replaceAll(RegExp(r'^_+|_+$'), '');
+    final file = File(p.join(
+      directory.path,
+      'stock_history_${safeName.isEmpty ? 'product' : safeName}.csv',
+    ));
+    await file.writeAsString('\uFEFF${lines.join('\n')}');
+    await Share.shareXFiles(
+      [XFile(file.path, mimeType: 'text/csv')],
+      subject: 'SHOPMASTER PRO stock history',
+      text: 'Stock history for ${widget.product.name} (${rows.length} movements)',
+    );
   }
 
   Future<void> _chooseDates() async {
@@ -142,9 +187,20 @@ class _StockHistoryScreenState extends State<StockHistoryScreen> {
                             ),
                           ),
                         ),
-                        Text(
-                          '${rows.length} of ${allRows.length} movements',
-                          style: Theme.of(context).textTheme.bodySmall,
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                '${rows.length} of ${allRows.length} movements',
+                                style: Theme.of(context).textTheme.bodySmall,
+                              ),
+                            ),
+                            TextButton.icon(
+                              onPressed: rows.isEmpty ? null : () => _exportCsv(rows),
+                              icon: const Icon(Icons.file_download_outlined),
+                              label: const Text('Export CSV'),
+                            ),
+                          ],
                         ),
                       ],
                     ),
