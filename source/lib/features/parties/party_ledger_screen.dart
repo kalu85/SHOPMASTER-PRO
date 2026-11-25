@@ -1,5 +1,10 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 import 'package:printing/printing.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../core/data/account_repository.dart';
 import '../../core/data/party_repository.dart';
@@ -212,8 +217,25 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
         _isCustomer
             ? 'Amount to receive: ${money(_party.currentBalance)}'
             : 'Amount to pay: ${money(_party.currentBalance)}',
+        'Closing balance: ${money(running)}',
       ],
     );
+  }
+
+  Future<void> _statementCsv() async {
+    try {
+      final data = _statement();
+      final dir = await getTemporaryDirectory();
+      final safeName = _party.name.trim().replaceAll(RegExp(r'[^a-zA-Z0-9_-]+'), '_');
+      final file = File(p.join(dir.path, 'statement_${safeName.isEmpty ? 'party' : safeName}.csv'));
+      await file.writeAsString(data.toCsv());
+      await Share.shareXFiles(
+        [XFile(file.path, mimeType: 'text/csv')],
+        subject: data.title,
+      );
+    } catch (e) {
+      _msg('Could not export statement: $e');
+    }
   }
 
   Future<void> _statementPdf() async {
@@ -286,6 +308,11 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
                             icon: const Icon(Icons.chat_rounded),
                             label: const Text('WhatsApp reminder'),
                           ),
+                        OutlinedButton.icon(
+                          onPressed: _statementCsv,
+                          icon: const Icon(Icons.table_chart_rounded),
+                          label: const Text('Statement CSV'),
+                        ),
                         OutlinedButton.icon(
                           onPressed: _statementPdf,
                           icon: const Icon(Icons.picture_as_pdf_rounded),
