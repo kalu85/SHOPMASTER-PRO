@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/data/serial_repository.dart';
 import '../../core/models/serial.dart';
+import '../../core/services/contact_service.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/format.dart';
 import '../../core/utils/serials.dart';
@@ -41,6 +42,31 @@ class _WarrantyScreenState extends State<WarrantyScreen> {
       _rows = r;
       _loading = false;
     });
+  }
+
+  Future<void> _sendWarrantyReminder(SerialRecord record) async {
+    if (record.customerPhone.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('This customer has no mobile number saved.')),
+      );
+      return;
+    }
+    final expiry = prettyDate(record.warrantyExpiry!);
+    final customer = record.customerName.trim();
+    final message = 'Hello${customer.isEmpty ? '' : ' $customer'}, '
+        'this is a warranty reminder for ${record.productName} '
+        '(Serial: ${record.serial}). '
+        'The warranty expires on $expiry. '
+        'Please contact our shop if you need assistance. '
+        'Thank you.';
+    final opened =
+        await ContactService.whatsApp(record.customerPhone, message);
+    if (!mounted) return;
+    if (!opened) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not open WhatsApp. Please try again.')),
+      );
+    }
   }
 
   @override
@@ -125,11 +151,22 @@ class _WarrantyScreenState extends State<WarrantyScreen> {
                               '${warrantyLabel(r.warrantyMonths)}  •  expires ${prettyDate(r.warrantyExpiry!)}',
                             ),
                             isThreeLine: true,
-                            trailing: Chip(
-                              label: Text(warrantyStateLabel(st)),
-                              backgroundColor:
-                                  warrantyColor(st).withValues(alpha: 0.18),
-                              visualDensity: VisualDensity.compact,
+                            trailing: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Chip(
+                                  label: Text(warrantyStateLabel(st)),
+                                  backgroundColor:
+                                      warrantyColor(st).withValues(alpha: 0.18),
+                                  visualDensity: VisualDensity.compact,
+                                ),
+                                IconButton(
+                                  tooltip: 'Prepare WhatsApp warranty reminder',
+                                  visualDensity: VisualDensity.compact,
+                                  icon: const Icon(Icons.message_outlined),
+                                  onPressed: () => _sendWarrantyReminder(r),
+                                ),
+                              ],
                             ),
                           ),
                         );
