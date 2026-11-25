@@ -1,4 +1,9 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../core/db/app_database.dart';
 import '../../core/theme/app_colors.dart';
@@ -30,6 +35,38 @@ class _StockAuditScreenState extends State<StockAuditScreen> {
   }
 
   void _refresh() => setState(() => _future = _load());
+
+  String _csvCell(Object? value) {
+    final text = value?.toString() ?? '';
+    return '"${text.replaceAll('"', '""')}"';
+  }
+
+  Future<void> _exportCsv(List<Map<String, Object?>> rows) async {
+    final differences = rows.where((row) =>
+        (_number(row['current_stock']) - _number(row['movement_stock'])).abs() > 0.000001).toList();
+    final visible = _showOnlyDifferences ? differences : rows;
+    final lines = <String>[
+      ['Product', 'Current stock', 'Movement ledger', 'Difference', 'Movement count'].map(_csvCell).join(','),
+      for (final row in visible)
+        [
+          row['name'],
+          _number(row['current_stock']),
+          _number(row['movement_stock']),
+          _number(row['current_stock']) - _number(row['movement_stock']),
+          row['movement_count'],
+        ].map(_csvCell).join(','),
+    ];
+    final dir = await getTemporaryDirectory();
+    final file = File(p.join(dir.path, 'shopmaster_stock_audit.csv'));
+    await file.writeAsString('\uFEFF${lines.join('\n')}');
+    await Share.shareXFiles(
+      [XFile(file.path, mimeType: 'text/csv')],
+      subject: 'SHOPMASTER PRO stock audit',
+      text: _showOnlyDifferences
+          ? 'Stock reconciliation differences only'
+          : 'Full stock reconciliation report',
+    );
+  }
 
   double _number(Object? value) => (value as num?)?.toDouble() ?? 0;
 
