@@ -1,0 +1,18 @@
+name: Inspect camera and purchase attachment integration
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Print integration files
+        run: |
+          unzip -q shopmaster_pro_final_all_updates.zip -d work
+          cd work/shopmaster_pro
+          for f in pubspec.yaml lib/core/db/app_database.dart lib/core/models/invoice.dart lib/features/invoices/line_dialog.dart lib/features/invoices/invoice_form_screen.dart; do
+            echo "===== $f ====="
+            cat "$f"
+          done
