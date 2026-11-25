@@ -185,6 +185,69 @@ class AccountRepository {
     });
   }
 
+  /// Replaces an expense and its linked account transaction atomically.
+  /// The old account entry is removed before the corrected one is recorded.
+  Future<void> updateExpense({
+    required int id,
+    required String category,
+    required String date,
+    required double amount,
+    required int accountId,
+    required String payMode,
+    String notes = '',
+  }) async {
+    final db = await _db;
+    await db.transaction((txn) async {
+      final existing = await txn.query(
+        'expenses',
+        columns: ['id'],
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+      if (existing.isEmpty) {
+        throw StateError('This expense no longer exists. Refresh and try again.');
+      }
+      final account = await txn.query(
+        'accounts',
+        columns: ['id'],
+        where: 'id = ?',
+        whereArgs: [accountId],
+      );
+      if (account.isEmpty) {
+        throw StateError('The selected cash/bank account no longer exists.');
+      }
+      final now = DateTime.now().toIso8601String();
+      await txn.update(
+        'expenses',
+        {
+          'category': category,
+          'expense_date': date,
+          'amount': amount,
+          'account_id': accountId,
+          'pay_mode': payMode,
+          'notes': notes,
+        },
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+      await txn.delete(
+        'account_txns',
+        where: "kind = 'expense' AND ref = ?",
+        whereArgs: ['EXP-$id'],
+      );
+      await txn.insert('account_txns', {
+        'account_id': accountId,
+        'direction': 'out',
+        'amount': amount,
+        'kind': 'expense',
+        'ref': 'EXP-$id',
+        'note': category,
+        'txn_date': date,
+        'created_at': now,
+      });
+    });
+  }
+
   Future<List<Expense>> expenses({String? from, String? to}) async {
     final db = await _db;
     final rows = await db.query(
