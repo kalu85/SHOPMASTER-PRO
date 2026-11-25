@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:share_plus/share_plus.dart';
+import '../../core/data/invoice_attachment_repository.dart';
 
 import '../../core/data/invoice_repository.dart';
 import '../../core/models/invoice.dart';
@@ -247,6 +249,33 @@ class InvoiceDetailScreen extends StatelessWidget {
                   ),
                 ),
               ),
+              if (inv.kind == InvoiceKind.purchase && inv.docType == DocType.invoice) ...[
+                const SizedBox(height: 12),
+                FutureBuilder<List<Map<String, Object?>>>(
+                  future: InvoiceAttachmentRepository.instance.list(inv.id!),
+                  builder: (context, snap) {
+                    if (snap.connectionState != ConnectionState.done) return const LinearProgressIndicator();
+                    final files = snap.data ?? [];
+                    return Card(child: Padding(padding: const EdgeInsets.all(12), child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Supplier bill attachments', style: TextStyle(fontWeight: FontWeight.w700)),
+                        if (files.isEmpty) const Padding(padding: EdgeInsets.only(top: 8), child: Text('No bill files attached')),
+                        for (final file in files)
+                          ListTile(contentPadding: EdgeInsets.zero,
+                            leading: Icon((file['file_name'] as String).toLowerCase().endsWith('.pdf') ? Icons.picture_as_pdf : Icons.image),
+                            title: Text(file['file_name'] as String, maxLines: 1, overflow: TextOverflow.ellipsis),
+                            trailing: IconButton(tooltip: 'Share attachment', icon: const Icon(Icons.share_rounded),
+                              onPressed: () async {
+                                final path = file['file_path'] as String;
+                                await Share.shareXFiles([XFile(path)], text: file['file_name'] as String);
+                              }),
+                          ),
+                      ],
+                    )));
+                  },
+                ),
+              ],
               const SizedBox(height: 12),
               FilledButton.icon(
                 onPressed: () => Navigator.of(context).push(MaterialPageRoute(
