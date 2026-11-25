@@ -185,6 +185,8 @@ class InvoiceItem {
     this.serials = '',
     this.warrantyMonths = 0,
     this.purchaseRateSnapshot = 0,
+    this.batchNumber = '',
+    this.expiryDate,
   });
 
   final int? productId;
@@ -209,6 +211,9 @@ class InvoiceItem {
 
   /// Product cost captured when this invoice line was saved.
   final double purchaseRateSnapshot;
+  final String batchNumber;
+  /// yyyy-MM-dd; populated for purchase invoice batches.
+  final String? expiryDate;
 
   factory InvoiceItem.fromMap(Map<String, Object?> m) => InvoiceItem(
         productId: m['product_id'] as int?,
@@ -226,6 +231,8 @@ class InvoiceItem {
         serials: (m['serials'] as String?) ?? '',
         warrantyMonths: ((m['warranty_months'] as num?) ?? 0).toInt(),
         purchaseRateSnapshot: ((m['purchase_rate_snapshot'] as num?) ?? 0).toDouble(),
+        batchNumber: (m['batch_number'] as String?) ?? '',
+        expiryDate: m['expiry_date'] as String?,
       );
 
   Map<String, Object?> toMap(int invoiceId) => {
@@ -245,5 +252,7 @@ class InvoiceItem {
         'serials': serials,
         'warranty_months': warrantyMonths,
         'purchase_rate_snapshot': purchaseRateSnapshot,
+        'batch_number': batchNumber,
+        'expiry_date': expiryDate,
       };
 }
