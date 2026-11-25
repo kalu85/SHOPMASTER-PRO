@@ -213,6 +213,7 @@ class _InvoiceFormScreenState extends State<InvoiceFormScreen> {
         showGst: _isGst,
         showSerials: _serialsAllowed,
         showWarranty: _isSale && _serialsAllowed,
+        showExpiry: _isPurchaseInvoice,
       );
       if (line != null && mounted) setState(() => _lines.add(line));
       return;
