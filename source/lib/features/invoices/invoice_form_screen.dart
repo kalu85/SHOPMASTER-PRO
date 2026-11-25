@@ -340,6 +340,8 @@ class _InvoiceFormScreenState extends State<InvoiceFormScreen> {
           amount: t.lines[i].amount,
           serials: _lines[i].serials,
           warrantyMonths: _isSale ? _lines[i].warrantyMonths : 0,
+          purchaseRateSnapshot: _lines[i].product?.purchaseRate ??
+              (_isPurchaseInvoice ? _lines[i].rate : 0),
         ),
     ];
     try {
