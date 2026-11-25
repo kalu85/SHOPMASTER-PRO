@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../core/data/invoice_repository.dart';
@@ -28,6 +30,8 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
   bool _hasMore = false;
   bool _loadingMore = false;
   String? _error;
+  Timer? _searchDebounce;
+  int _loadGeneration = 0;
 
   static const int _pageSize = 100;
 
@@ -52,12 +56,26 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
     _search.dispose();
     super.dispose();
   }
 
-  Future<void> _load() async {
-    setState(() => _loading = true);
+  void _scheduleLoad({bool immediate = false}) {
+    _searchDebounce?.cancel();
+    final generation = ++_loadGeneration;
+    if (mounted) setState(() => _loading = true);
+    void run() => _load(generation);
+    if (immediate) {
+      run();
+    } else {
+      _searchDebounce = Timer(const Duration(milliseconds: 300), run);
+    }
+  }
+
+  Future<void> _load([int? requestedGeneration]) async {
+    final generation = requestedGeneration ?? ++_loadGeneration;
+    if (mounted) setState(() => _loading = true);
     try {
       final page = await _repo.list(
         widget.kind,
@@ -65,17 +83,19 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
         query: _search.text,
         limit: _pageSize + 1,
       );
-      if (!mounted) return;
+      if (!mounted || generation != _loadGeneration) return;
       setState(() {
+        _loadingMore = false;
         _hasMore = page.length > _pageSize;
         _items = page.take(_pageSize).toList();
         _loading = false;
         _error = null;
       });
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted || generation != _loadGeneration) return;
       setState(() {
         _loading = false;
+        _loadingMore = false;
         _error = 'Could not load: $e';
       });
     }
@@ -83,6 +103,7 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
 
   Future<void> _loadMore() async {
     if (_loadingMore || !_hasMore) return;
+    final generation = _loadGeneration;
     setState(() => _loadingMore = true);
     try {
       final page = await _repo.list(
@@ -92,14 +113,14 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
         limit: _pageSize + 1,
         offset: _items.length,
       );
-      if (!mounted) return;
+      if (!mounted || generation != _loadGeneration) return;
       setState(() {
         _hasMore = page.length > _pageSize;
         _items.addAll(page.take(_pageSize));
         _loadingMore = false;
       });
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted || generation != _loadGeneration) return;
       setState(() => _loadingMore = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Could not load older documents: $e')),
@@ -197,11 +218,8 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
                     ],
                     selected: {_doc},
                     onSelectionChanged: (s) {
-                      setState(() {
-                        _doc = s.first;
-                        _loading = true;
-                      });
-                      _load();
+                      setState(() => _doc = s.first);
+                      _scheduleLoad(immediate: true);
                     },
                   ),
                 ),
@@ -210,7 +228,7 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
                 child: TextField(
                   controller: _search,
-                  onChanged: (_) => _load(),
+                  onChanged: (_) => _scheduleLoad(),
                   decoration: InputDecoration(
                     hintText: 'Search number, name or phone',
                     prefixIcon: const Icon(Icons.search_rounded),
