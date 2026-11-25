@@ -13,7 +13,10 @@ Future<void> main() async {
 }
 
 class ShopMasterApp extends StatelessWidget {
-  const ShopMasterApp({super.key});
+  const ShopMasterApp({super.key, this.bypassAppLock = false});
+
+  /// Allows widget tests to exercise the dashboard without native secure storage.
+  final bool bypassAppLock;
 
   @override
   Widget build(BuildContext context) {
@@ -21,7 +24,9 @@ class ShopMasterApp extends StatelessWidget {
       title: 'SHOPMASTER PRO',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light(),
-      home: const AppLockGate(child: AppShell()),
+      home: bypassAppLock
+          ? const AppShell()
+          : const AppLockGate(child: AppShell()),
     );
   }
 }
