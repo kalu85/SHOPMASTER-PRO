@@ -232,7 +232,7 @@ class _InvoiceFormScreenState extends State<InvoiceFormScreen> {
   }
 
   Future<void> _scanSaleItem() async {
-    if (!_isSale || widget.docType != DocType.invoice || _editing) return;
+    if (!_isSale || widget.docType != DocType.invoice) return;
     final code = await Navigator.of(context).push<String>(
       MaterialPageRoute(builder: (_) => const SerialScannerScreen()),
     );
@@ -682,7 +682,7 @@ class _InvoiceFormScreenState extends State<InvoiceFormScreen> {
                 children: [
                   Text('Items', style: Theme.of(context).textTheme.titleMedium),
                   const Spacer(),
-                  if (_isSale && widget.docType == DocType.invoice && !_editing) ...[
+                  if (_isSale && widget.docType == DocType.invoice) ...[
                     OutlinedButton.icon(
                       onPressed: _scanSaleItem,
                       icon: const Icon(Icons.qr_code_scanner_rounded),
