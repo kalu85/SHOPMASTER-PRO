@@ -51,7 +51,7 @@ void main() {
   });
 
   testWidgets('app starts on the dashboard', (tester) async {
-    await tester.pumpWidget(const ShopMasterApp());
+    await tester.pumpWidget(const ShopMasterApp(bypassAppLock: true));
     expect(find.text('SHOPMASTER PRO'), findsWidgets);
     expect(find.text("Today's Sales"), findsOneWidget);
   });
