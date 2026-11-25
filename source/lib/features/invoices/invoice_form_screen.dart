@@ -231,6 +231,69 @@ class _InvoiceFormScreenState extends State<InvoiceFormScreen> {
     });
   }
 
+  Future<void> _scanSaleItem() async {
+    if (!_isSale || widget.docType != DocType.invoice || _editing) return;
+    final code = await Navigator.of(context).push<String>(
+      MaterialPageRoute(builder: (_) => const SerialScannerScreen()),
+    );
+    if (code == null || !mounted || code.trim().isEmpty) return;
+    final value = code.trim();
+    try {
+      final serialRows = await SerialRepository.instance.list(query: value);
+      SerialRecord? serial;
+      for (final row in serialRows) {
+        if (row.serial.toLowerCase() == value.toLowerCase()) { serial = row; break; }
+      }
+      Product? product;
+      if (serial != null) {
+        if (serial.status == 'sold') throw SerialException('This serial is already sold: ' + serial.saleNumber);
+        if (serial.status == 'returned') throw SerialException('This serial was returned to the supplier');
+        if (_lines.any((line) => parseSerials(line.serials).any((s) => s.toLowerCase() == value.toLowerCase()))) {
+          throw SerialException('This serial is already in this invoice');
+        }
+        if (serial.productId != null) product = await ProductRepository.instance.byId(serial.productId!);
+        if (product == null && serial.productName.isNotEmpty) {
+          final matches = await ProductRepository.instance.list(query: serial.productName);
+          for (final item in matches) {
+            if (item.name.toLowerCase() == serial.productName.toLowerCase()) { product = item; break; }
+          }
+        }
+        if (product == null) throw SerialException('No product is linked to this serial');
+        final selected = product;
+        final index = _lines.indexWhere((line) => line.product?.id == selected.id);
+        setState(() {
+          if (index >= 0) {
+            _lines[index].qty += 1;
+            _lines[index].serials = [_lines[index].serials, value].where((s) => s.trim().isNotEmpty).join(', ');
+          } else {
+            _lines.add(DraftLine(product: selected, name: selected.name, hsn: selected.hsn, qty: 1, rate: selected.saleRate, gstRate: selected.gstRate, serials: value));
+          }
+        });
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Added ' + selected.name + ' with serial ' + value)));
+        return;
+      }
+      final products = await ProductRepository.instance.list(query: value);
+      for (final item in products) {
+        if (item.barcode?.toLowerCase() == value.toLowerCase()) { product = item; break; }
+      }
+      if (product == null) throw SerialException('No product barcode or registered serial matches: ' + value);
+      final selected = product;
+      final index = _lines.indexWhere((line) => line.product?.id == selected.id);
+      setState(() {
+        if (index >= 0) {
+          _lines[index].qty += 1;
+        } else {
+          _lines.add(DraftLine(product: selected, name: selected.name, hsn: selected.hsn, qty: 1, rate: selected.saleRate, gstRate: selected.gstRate));
+        }
+      });
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Added ' + selected.name)));
+    } on SerialException catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.message)));
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not add scanned item: ' + error.toString())));
+    }
+  }
+
   Future<void> _editLine(int i) async {
     final edited = await showLineDialog(
       context,
