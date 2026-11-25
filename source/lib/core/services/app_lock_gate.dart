@@ -39,13 +39,18 @@ class _AppLockGateState extends State<AppLockGate>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.paused && _enabled && mounted) {
-      setState(() {
-        _locked = true;
-        _pin.clear();
-        _error = null;
-      });
-    }
+    if (state == AppLifecycleState.paused) _lockIfEnabled();
+  }
+
+  Future<void> _lockIfEnabled() async {
+    final enabled = await AppLockService.instance.isEnabled;
+    if (!mounted || !enabled) return;
+    setState(() {
+      _enabled = true;
+      _locked = true;
+      _pin.clear();
+      _error = null;
+    });
   }
 
   Future<void> _unlock() async {
