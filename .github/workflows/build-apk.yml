@@ -2,12 +2,19 @@ name: Build APK
 
 on:
   workflow_dispatch:
+  schedule:
+    - cron: '30 8 * * *' # 2:00 PM India time
   push:
     branches: [main]
+
+concurrency:
+  group: shopmaster-apk-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
 
@@ -59,11 +66,11 @@ jobs:
             echo "No logo files found, skipping icon"
           fi
 
-      - name: Analyze (report only)
+      - name: Analyze
         working-directory: source
         run: flutter analyze --no-fatal-infos --no-fatal-warnings
 
-      - name: Test (report only)
+      - name: Run Flutter tests
         working-directory: source
         run: flutter test
 
@@ -102,3 +109,4 @@ jobs:
         with:
           name: shopmaster-pro-apk
           path: source/build/app/outputs/flutter-apk/app-release.apk
+          retention-days: 90
