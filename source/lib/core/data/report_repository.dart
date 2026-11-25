@@ -111,6 +111,7 @@ bool isGstinFormatValid(String value) {
 }
 
 class ReportRepository {
+  ReportRepository._();
   static final ReportRepository instance = ReportRepository._();
 
   Future<Database> get _db => AppDatabase.instance.db;
