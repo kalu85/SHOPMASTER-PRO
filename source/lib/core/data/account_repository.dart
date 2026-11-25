@@ -84,6 +84,23 @@ class AccountRepository {
     return rows.map(AccountTxn.fromMap).toList();
   }
 
+  /// Validates transfer inputs before any account history is changed.
+  static void validateTransfer({
+    required int fromId,
+    required int toId,
+    required double amount,
+  }) {
+    if (fromId <= 0 || toId <= 0) {
+      throw ArgumentError('Choose two valid accounts.');
+    }
+    if (fromId == toId) {
+      throw ArgumentError('Choose two different accounts.');
+    }
+    if (!amount.isFinite || amount <= 0) {
+      throw ArgumentError.value(amount, 'amount', 'Must be finite and greater than zero.');
+    }
+  }
+
   /// Moves money between two accounts (bank transfer, cash deposit or
   /// cash withdrawal). Both sides are saved together or not at all.
   Future<void> transfer({
@@ -94,8 +111,18 @@ class AccountRepository {
     required String date,
     String note = '',
   }) async {
+    validateTransfer(fromId: fromId, toId: toId, amount: amount);
     final db = await _db;
     await db.transaction((txn) async {
+      final accounts = await txn.query(
+        'accounts',
+        columns: ['id'],
+        where: 'id IN (?, ?)',
+        whereArgs: [fromId, toId],
+      );
+      if (accounts.length != 2) {
+        throw StateError('One of the selected accounts no longer exists. Refresh and try again.');
+      }
       final now = DateTime.now().toIso8601String();
       await txn.insert('account_txns', {
         'account_id': fromId,
