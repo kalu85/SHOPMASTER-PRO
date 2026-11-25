@@ -52,7 +52,7 @@ class _SerialScreenState extends State<SerialScreen> {
 
   String _csvCell(Object? value) {
     final text = value?.toString() ?? '';
-    return '"\${text.replaceAll('"', '""')}"';
+    return '"${text.replaceAll('"', '""')}"';
   }
 
   Future<void> _exportCsv() async {
@@ -72,11 +72,11 @@ class _SerialScreenState extends State<SerialScreen> {
     ];
     final directory = await getTemporaryDirectory();
     final file = File(p.join(directory.path, 'shopmaster_serial_register.csv'));
-    await file.writeAsString('\uFEFF\${lines.join('\n')}');
+    await file.writeAsString('\uFEFF${lines.join('\n')}');
     await Share.shareXFiles(
       [XFile(file.path, mimeType: 'text/csv')],
       subject: 'SHOPMASTER PRO serial register',
-      text: 'Serial register export (\${_rows.length} records)',
+      text: 'Serial register export (${_rows.length} records)',
     );
   }
 
@@ -203,7 +203,7 @@ class _SerialScreenState extends State<SerialScreen> {
               children: [
                 Expanded(
                   child: Text(
-                    _loading ? 'Loading serials...' : '\${_rows.length} serial records (up to 300)',
+                    _loading ? 'Loading serials...' : '${_rows.length} serial records (up to 300)',
                     style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
                   ),
                 ),
