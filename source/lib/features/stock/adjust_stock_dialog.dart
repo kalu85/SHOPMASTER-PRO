@@ -46,7 +46,7 @@ class _AdjustStockDialogState extends State<_AdjustStockDialog> {
 
   Future<void> _save() async {
     final q = double.tryParse(_qty.text.trim());
-    if (q == null || q <= 0) {
+    if (q == null || !q.isFinite || q <= 0) {
       setState(() => _error = 'Enter a quantity greater than zero');
       return;
     }
