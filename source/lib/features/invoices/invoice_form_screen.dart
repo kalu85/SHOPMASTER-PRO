@@ -483,7 +483,7 @@ class _InvoiceFormScreenState extends State<InvoiceFormScreen> {
       nav.pop(true);
       if (openPdf != null) {
         final inv = openPdf;
-        nav.push(MaterialPageRoute(builder: (_) => InvoicePdfScreen(invoice: inv)));
+        nav.push(MaterialPageRoute(builder: (_) => InvoicePdfScreen(invoice: inv, autoShareOnOpen: true)));
       }
     } on SerialException catch (e) {
       if (!mounted) return;
