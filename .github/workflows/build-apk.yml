@@ -29,11 +29,11 @@ jobs:
         run: flutter create --platforms=android --project-name shopmaster_pro --org com.shopmaster .
 
       - name: Get packages
-        working-directory: work/shopmaster_pro
+        working-directory: source
         run: flutter pub get
 
       - name: Apply app icon (optional)
-        working-directory: work/shopmaster_pro
+        working-directory: source
         run: |
           if [ -f assets/logo.png ] && [ -f assets/logo_foreground.png ]; then
             flutter pub add --dev flutter_launcher_icons || true
@@ -44,15 +44,15 @@ jobs:
           fi
 
       - name: Analyze (report only)
-        working-directory: work/shopmaster_pro
+        working-directory: source
         run: flutter analyze
 
       - name: Test (report only)
-        working-directory: work/shopmaster_pro
+        working-directory: source
         run: flutter test
 
       - name: Raise compileSdk to 36 (app and all plugins)
-        working-directory: work/shopmaster_pro
+        working-directory: source
         run: |
           mkdir -p ~/.gradle/init.d
           cat > ~/.gradle/init.d/sdk36.gradle <<'EOF'
@@ -72,7 +72,7 @@ jobs:
           done
 
       - name: Build APK
-        working-directory: work/shopmaster_pro
+        working-directory: source
         run: flutter build apk --release
 
       - name: Upload APK
