@@ -1,0 +1,261 @@
+import 'package:flutter/material.dart';
+
+import '../../core/data/account_repository.dart';
+import '../../core/models/account.dart';
+import '../../core/models/invoice.dart' show kPayModes;
+import '../../core/theme/app_colors.dart';
+import '../../core/utils/format.dart';
+import '../../core/widgets/confirm_dialog.dart';
+
+/// Expenses: record shop costs. Each one also reduces the chosen
+/// cash/bank account.
+class ExpensesScreen extends StatefulWidget {
+  const ExpensesScreen({super.key});
+
+  @override
+  State<ExpensesScreen> createState() => _ExpensesScreenState();
+}
+
+class _ExpensesScreenState extends State<ExpensesScreen> {
+  List<Expense> _rows = [];
+  List<Account> _accounts = [];
+  DateTimeRange? _range;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    final now = DateTime.now();
+    _range = DateTimeRange(
+        start: DateTime(now.year, now.month, 1), end: DateTime(now.year, now.month, now.day));
+    _load();
+  }
+
+  Future<void> _load() async {
+    final r = _range!;
+    final rows = await AccountRepository.instance
+        .expenses(from: isoDateFmt.format(r.start), to: isoDateFmt.format(r.end));
+    final accs = await AccountRepository.instance.accounts();
+    if (!mounted) return;
+    setState(() {
+      _rows = rows;
+      _accounts = accs;
+      _loading = false;
+    });
+  }
+
+  double get _total => _rows.fold<double>(0, (s, e) => s + e.amount);
+
+  Future<void> _pickRange() async {
+    final r = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(2000),
+      lastDate: DateTime.now().add(const Duration(days: 365)),
+      initialDateRange: _range,
+    );
+    if (r != null) {
+      _range = r;
+      _load();
+    }
+  }
+
+  InputDecoration _dec(String l) =>
+      InputDecoration(labelText: l, border: const OutlineInputBorder());
+
+  Future<void> _add() async {
+    String category = kExpenseCategories.first;
+    String mode = 'Cash';
+    int? acc = _accounts.isEmpty ? null : _accounts.first.id;
+    DateTime date = DateTime.now();
+    final amount = TextEditingController();
+    final note = TextEditingController();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setS) => AlertDialog(
+          title: const Text('New expense'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                DropdownButtonFormField<String>(
+                  initialValue: category,
+                  decoration: _dec('Category'),
+                  items: [
+                    for (final c in kExpenseCategories)
+                      DropdownMenuItem(value: c, child: Text(c)),
+                  ],
+                  onChanged: (v) => setS(() => category = v ?? category),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                    controller: amount,
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
+                    decoration: _dec('Amount (₹)')),
+                const SizedBox(height: 10),
+                DropdownButtonFormField<String>(
+                  initialValue: mode,
+                  decoration: _dec('Paid by'),
+                  items: [
+                    for (final m in kPayModes.where((m) => m != 'Credit'))
+                      DropdownMenuItem(value: m, child: Text(m)),
+                  ],
+                  onChanged: (v) => setS(() {
+                    mode = v ?? 'Cash';
+                    final cash = _accounts.where((a) => a.isCash).toList();
+                    final banks = _accounts.where((a) => !a.isCash).toList();
+                    if (mode == 'Cash' && cash.isNotEmpty) acc = cash.first.id;
+                    if (mode != 'Cash' && banks.isNotEmpty) acc = banks.first.id;
+                  }),
+                ),
+                const SizedBox(height: 10),
+                DropdownButtonFormField<int>(
+                  key: ValueKey('acc$acc'),
+                  initialValue: acc,
+                  decoration: _dec('Money goes out of'),
+                  items: [
+                    for (final a in _accounts)
+                      DropdownMenuItem(value: a.id, child: Text(a.name)),
+                  ],
+                  onChanged: (v) => setS(() => acc = v),
+                ),
+                const SizedBox(height: 10),
+                OutlinedButton.icon(
+                  onPressed: () async {
+                    final d = await showDatePicker(
+                      context: ctx,
+                      initialDate: date,
+                      firstDate: DateTime(2000),
+                      lastDate: DateTime.now().add(const Duration(days: 365)),
+                    );
+                    if (d != null) setS(() => date = d);
+                  },
+                  icon: const Icon(Icons.calendar_today_rounded, size: 18),
+                  label: Text(dateFmt.format(date)),
+                ),
+                const SizedBox(height: 10),
+                TextField(controller: note, decoration: _dec('Note (optional)')),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancel')),
+            FilledButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Save')),
+          ],
+        ),
+      ),
+    );
+    final amt = double.tryParse(amount.text.trim());
+    final n = note.text.trim();
+    amount.dispose();
+    note.dispose();
+    if (ok != true) return;
+    if (amt == null || amt <= 0 || acc == null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Enter an amount greater than zero')));
+      return;
+    }
+    await AccountRepository.instance.addExpense(
+      category: category,
+      date: isoDateFmt.format(date),
+      amount: amt,
+      accountId: acc!,
+      payMode: mode,
+      notes: n,
+    );
+    await _load();
+  }
+
+  Future<void> _delete(Expense e) async {
+    final sure = await confirmDialog(context,
+        title: 'Delete this expense?',
+        message:
+            '${e.category} ${inr.format(e.amount)} will be removed and the money goes back to the account.',
+        confirmLabel: 'Delete');
+    if (!sure) return;
+    await AccountRepository.instance.deleteExpense(e.id);
+    await _load();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final r = _range!;
+    return Scaffold(
+      floatingActionButton: FloatingActionButton.extended(
+        backgroundColor: AppColors.expenses,
+        foregroundColor: Colors.white,
+        onPressed: _add,
+        icon: const Icon(Icons.add_rounded),
+        label: const Text('Add expense'),
+      ),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: _pickRange,
+                          icon: const Icon(Icons.date_range_rounded),
+                          label: Text(
+                              '${dateFmt.format(r.start)} - ${dateFmt.format(r.end)}'),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Text(inr.format(_total),
+                          style: const TextStyle(
+                              fontWeight: FontWeight.w800, fontSize: 16)),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: _rows.isEmpty
+                      ? const Center(
+                          child: Text('No expenses in this period.',
+                              style: TextStyle(color: AppColors.textMuted)))
+                      : ListView.builder(
+                          padding: const EdgeInsets.fromLTRB(12, 0, 12, 90),
+                          itemCount: _rows.length,
+                          itemBuilder: (_, i) {
+                            final e = _rows[i];
+                            return Card(
+                              child: ListTile(
+                                title: Text(e.category,
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.w700)),
+                                subtitle: Text(
+                                    '${prettyDate(e.date)}  •  ${e.payMode}${e.notes.isEmpty ? '' : '\n${e.notes}'}'),
+                                isThreeLine: e.notes.isNotEmpty,
+                                trailing: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(inr.format(e.amount),
+                                        style: const TextStyle(
+                                            fontWeight: FontWeight.w800)),
+                                    IconButton(
+                                      tooltip: 'Delete',
+                                      icon: const Icon(
+                                          Icons.delete_outline_rounded),
+                                      onPressed: () => _delete(e),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                ),
+              ],
+            ),
+    );
+  }
+}

@@ -1,0 +1,524 @@
+import 'package:sqflite/sqflite.dart';
+
+import '../db/app_database.dart';
+import '../models/invoice.dart';
+import '../utils/serials.dart';
+
+enum ReportType {
+  salesSummary,
+  purchaseSummary,
+  gst,
+  nonGst,
+  profitLoss,
+  stock,
+  lowStock,
+  customerOutstanding,
+  supplierOutstanding,
+  cash,
+  bank,
+  expenses,
+  warranty,
+  serials,
+}
+
+enum ReportGroup { day, month, year }
+
+class ReportInfo {
+  const ReportInfo(this.type, this.title, this.usesDates, {this.grouped = false});
+  final ReportType type;
+  final String title;
+  final bool usesDates;
+
+  /// Daily / monthly / yearly switch.
+  final bool grouped;
+}
+
+const List<ReportInfo> kReports = [
+  ReportInfo(ReportType.salesSummary, 'Sales (daily / monthly / yearly)', true,
+      grouped: true),
+  ReportInfo(
+      ReportType.purchaseSummary, 'Purchases (daily / monthly / yearly)', true,
+      grouped: true),
+  ReportInfo(ReportType.gst, 'GST report', true),
+  ReportInfo(ReportType.nonGst, 'NON-GST report', true),
+  ReportInfo(ReportType.profitLoss, 'Profit and loss', true),
+  ReportInfo(ReportType.stock, 'Stock report', false),
+  ReportInfo(ReportType.lowStock, 'Low-stock report', false),
+  ReportInfo(ReportType.customerOutstanding, 'Customer outstanding', false),
+  ReportInfo(ReportType.supplierOutstanding, 'Supplier outstanding', false),
+  ReportInfo(ReportType.cash, 'Cash report', true),
+  ReportInfo(ReportType.bank, 'Bank report', true),
+  ReportInfo(ReportType.expenses, 'Expense report', true),
+  ReportInfo(ReportType.warranty, 'Warranty report', false),
+  ReportInfo(ReportType.serials, 'Serial number report', false),
+];
+
+class ReportData {
+  const ReportData({
+    required this.title,
+    required this.columns,
+    required this.rows,
+    this.summary = const [],
+  });
+
+  final String title;
+  final List<String> columns;
+  final List<List<String>> rows;
+  final List<String> summary;
+
+  /// Spreadsheet-friendly CSV (opens in Excel / Google Sheets).
+  String toCsv() {
+    String esc(String s) {
+      if (s.contains(',') || s.contains('"') || s.contains('\n')) {
+        return '"${s.replaceAll('"', '""')}"';
+      }
+      return s;
+    }
+
+    final b = StringBuffer();
+    b.writeln(esc(title));
+    b.writeln(columns.map(esc).join(','));
+    for (final r in rows) {
+      b.writeln(r.map(esc).join(','));
+    }
+    if (summary.isNotEmpty) {
+      b.writeln();
+      for (final s in summary) {
+        b.writeln(esc(s));
+      }
+    }
+    return b.toString();
+  }
+}
+
+String money(num v) => v.toStringAsFixed(2);
+
+double _d(Object? v) => ((v ?? 0) as num).toDouble();
+
+class ReportRepository {
+  ReportRepository._();
+  static final ReportRepository instance = ReportRepository._();
+
+  Future<Database> get _db => AppDatabase.instance.db;
+
+  Future<ReportData> build(
+    ReportType type, {
+    required String from,
+    required String to,
+    ReportGroup group = ReportGroup.day,
+  }) {
+    switch (type) {
+      case ReportType.salesSummary:
+        return _summary(InvoiceKind.sale, from, to, group);
+      case ReportType.purchaseSummary:
+        return _summary(InvoiceKind.purchase, from, to, group);
+      case ReportType.gst:
+        return _gst(from, to);
+      case ReportType.nonGst:
+        return _nonGst(from, to);
+      case ReportType.profitLoss:
+        return _profitLoss(from, to);
+      case ReportType.stock:
+        return _stock(lowOnly: false);
+      case ReportType.lowStock:
+        return _stock(lowOnly: true);
+      case ReportType.customerOutstanding:
+        return _outstanding('customer');
+      case ReportType.supplierOutstanding:
+        return _outstanding('supplier');
+      case ReportType.cash:
+        return _accountReport('cash', from, to);
+      case ReportType.bank:
+        return _accountReport('bank', from, to);
+      case ReportType.expenses:
+        return _expenses(from, to);
+      case ReportType.warranty:
+        return _warranty();
+      case ReportType.serials:
+        return _serials();
+    }
+  }
+
+  Future<ReportData> _summary(
+    InvoiceKind kind,
+    String from,
+    String to,
+    ReportGroup group,
+  ) async {
+    final db = await _db;
+    final n = switch (group) {
+      ReportGroup.day => 10,
+      ReportGroup.month => 7,
+      ReportGroup.year => 4,
+    };
+    final rows = await db.rawQuery('''
+      SELECT substr(invoice_date, 1, $n) AS p,
+        SUM(CASE doc_type WHEN 'invoice' THEN 1 ELSE 0 END) AS cnt,
+        SUM(CASE doc_type WHEN 'invoice' THEN taxable_total WHEN 'return' THEN -taxable_total ELSE 0 END) AS taxable,
+        SUM(CASE doc_type WHEN 'invoice' THEN cgst + sgst + igst WHEN 'return' THEN -(cgst + sgst + igst) ELSE 0 END) AS gst,
+        SUM(CASE doc_type WHEN 'invoice' THEN grand_total WHEN 'return' THEN -grand_total ELSE 0 END) AS total,
+        SUM(CASE doc_type WHEN 'invoice' THEN paid WHEN 'return' THEN -paid ELSE 0 END) AS paid
+      FROM invoices
+      WHERE kind = ? AND doc_type != 'quotation' AND invoice_date BETWEEN ? AND ?
+      GROUP BY p ORDER BY p DESC
+    ''', [kind.name, from, to]);
+    var tTaxable = 0.0, tGst = 0.0, tTotal = 0.0, tPaid = 0.0;
+    var tCount = 0;
+    final out = <List<String>>[];
+    for (final r in rows) {
+      tCount += (r['cnt'] as num).toInt();
+      tTaxable += _d(r['taxable']);
+      tGst += _d(r['gst']);
+      tTotal += _d(r['total']);
+      tPaid += _d(r['paid']);
+      out.add([
+        r['p'] as String,
+        '${r['cnt']}',
+        money(_d(r['taxable'])),
+        money(_d(r['gst'])),
+        money(_d(r['total'])),
+        money(_d(r['paid'])),
+      ]);
+    }
+    final label = kind == InvoiceKind.sale ? 'Sales' : 'Purchases';
+    return ReportData(
+      title: '$label report ($from to $to), returns deducted',
+      columns: const ['Period', 'Invoices', 'Taxable', 'GST', 'Total', 'Paid'],
+      rows: out,
+      summary: [
+        'Invoices: $tCount',
+        'Taxable: ${money(tTaxable)}   GST: ${money(tGst)}',
+        'Total: ${money(tTotal)}   Paid: ${money(tPaid)}   Due: ${money(tTotal - tPaid)}',
+      ],
+    );
+  }
+
+  Future<ReportData> _gst(String from, String to) async {
+    final db = await _db;
+    final rows = await db.query(
+      'invoices',
+      where:
+          "is_gst = 1 AND doc_type != 'quotation' AND invoice_date BETWEEN ? AND ?",
+      whereArgs: [from, to],
+      orderBy: 'invoice_date, id',
+    );
+    var outGst = 0.0, inGst = 0.0;
+    final out = <List<String>>[];
+    for (final r in rows) {
+      final sign = r['doc_type'] == 'return' ? -1.0 : 1.0;
+      final gst = sign * (_d(r['cgst']) + _d(r['sgst']) + _d(r['igst']));
+      final isSale = r['kind'] == 'sale';
+      if (isSale) {
+        outGst += gst;
+      } else {
+        inGst += gst;
+      }
+      out.add([
+        r['invoice_date'] as String,
+        '${isSale ? 'Sale' : 'Purchase'}${sign < 0 ? ' return' : ''}',
+        r['number'] as String,
+        r['party_name'] as String,
+        r['party_gstin'] as String,
+        money(sign * _d(r['taxable_total'])),
+        money(sign * _d(r['cgst'])),
+        money(sign * _d(r['sgst'])),
+        money(sign * _d(r['igst'])),
+        money(sign * _d(r['grand_total'])),
+      ]);
+    }
+    return ReportData(
+      title: 'GST report ($from to $to)',
+      columns: const [
+        'Date', 'Type', 'Number', 'Party', 'GSTIN', 'Taxable', 'CGST', 'SGST',
+        'IGST', 'Total',
+      ],
+      rows: out,
+      summary: [
+        'GST collected on sales (output): ${money(outGst)}',
+        'GST paid on purchases (input): ${money(inGst)}',
+        'Net GST payable: ${money(outGst - inGst)}',
+      ],
+    );
+  }
+
+  Future<ReportData> _nonGst(String from, String to) async {
+    final db = await _db;
+    final rows = await db.query(
+      'invoices',
+      where:
+          "is_gst = 0 AND doc_type != 'quotation' AND invoice_date BETWEEN ? AND ?",
+      whereArgs: [from, to],
+      orderBy: 'invoice_date, id',
+    );
+    var sales = 0.0, purchases = 0.0;
+    final out = <List<String>>[];
+    for (final r in rows) {
+      final sign = r['doc_type'] == 'return' ? -1.0 : 1.0;
+      final isSale = r['kind'] == 'sale';
+      final total = sign * _d(r['grand_total']);
+      if (isSale) {
+        sales += total;
+      } else {
+        purchases += total;
+      }
+      out.add([
+        r['invoice_date'] as String,
+        '${isSale ? 'Sale' : 'Purchase'}${sign < 0 ? ' return' : ''}',
+        r['number'] as String,
+        r['party_name'] as String,
+        money(total),
+        money(sign * _d(r['paid'])),
+        money(sign * _d(r['due'])),
+      ]);
+    }
+    return ReportData(
+      title: 'NON-GST report ($from to $to)',
+      columns: const ['Date', 'Type', 'Number', 'Party', 'Total', 'Paid', 'Due'],
+      rows: out,
+      summary: [
+        'NON-GST sales: ${money(sales)}',
+        'NON-GST purchases: ${money(purchases)}',
+      ],
+    );
+  }
+
+  Future<ReportData> _profitLoss(String from, String to) async {
+    final db = await _db;
+    final rev = await db.rawQuery('''
+      SELECT COALESCE(SUM(CASE doc_type WHEN 'invoice' THEN taxable_total WHEN 'return' THEN -taxable_total ELSE 0 END), 0) AS t
+      FROM invoices WHERE kind = 'sale' AND doc_type != 'quotation' AND invoice_date BETWEEN ? AND ?
+    ''', [from, to]);
+    final cogs = await db.rawQuery('''
+      SELECT COALESCE(SUM(CASE i.doc_type WHEN 'invoice' THEN ii.qty * p.purchase_rate WHEN 'return' THEN -ii.qty * p.purchase_rate ELSE 0 END), 0) AS t
+      FROM invoice_items ii
+      JOIN invoices i ON i.id = ii.invoice_id
+      LEFT JOIN products p ON p.id = ii.product_id
+      WHERE i.kind = 'sale' AND i.doc_type != 'quotation' AND i.invoice_date BETWEEN ? AND ?
+    ''', [from, to]);
+    final exp = await db.rawQuery(
+        'SELECT COALESCE(SUM(amount), 0) AS t FROM expenses WHERE expense_date BETWEEN ? AND ?',
+        [from, to]);
+    final revenue = _d(rev.first['t']);
+    final cost = _d(cogs.first['t']);
+    final expenses = _d(exp.first['t']);
+    final gross = revenue - cost;
+    final net = gross - expenses;
+    return ReportData(
+      title: 'Profit and loss ($from to $to)',
+      columns: const ['Item', 'Amount'],
+      rows: [
+        ['Sales (excluding GST, returns deducted)', money(revenue)],
+        ['Cost of goods sold', money(cost)],
+        ['Gross profit', money(gross)],
+        ['Expenses', money(expenses)],
+        ['Net profit', money(net)],
+      ],
+      summary: const [
+        'Cost of goods sold uses each item\'s CURRENT purchase rate, so it is an estimate.',
+      ],
+    );
+  }
+
+  Future<ReportData> _stock({required bool lowOnly}) async {
+    final db = await _db;
+    final rows = await db.query(
+      'products',
+      where: lowOnly
+          ? 'is_service = 0 AND min_stock > 0 AND current_stock <= min_stock'
+          : 'is_service = 0',
+      orderBy: 'name COLLATE NOCASE',
+    );
+    var value = 0.0;
+    final out = <List<String>>[];
+    for (final r in rows) {
+      final stock = _d(r['current_stock']);
+      final rate = _d(r['purchase_rate']);
+      value += stock * rate;
+      out.add([
+        r['name'] as String,
+        r['category'] as String,
+        stock.toStringAsFixed(stock == stock.roundToDouble() ? 0 : 2),
+        _d(r['min_stock']).toStringAsFixed(0),
+        money(rate),
+        money(stock * rate),
+      ]);
+    }
+    return ReportData(
+      title: lowOnly ? 'Low-stock report' : 'Stock report',
+      columns: const ['Item', 'Category', 'Stock', 'Min', 'Purchase rate', 'Value'],
+      rows: out,
+      summary: ['Items: ${out.length}   Stock value: ${money(value)}'],
+    );
+  }
+
+  Future<ReportData> _outstanding(String type) async {
+    final db = await _db;
+    final rows = await db.query(
+      'parties',
+      where: 'type = ? AND current_balance != 0',
+      whereArgs: [type],
+      orderBy: 'current_balance DESC',
+    );
+    var total = 0.0;
+    final out = <List<String>>[];
+    for (final r in rows) {
+      total += _d(r['current_balance']);
+      out.add([
+        r['name'] as String,
+        r['phone'] as String,
+        money(_d(r['current_balance'])),
+      ]);
+    }
+    final isCustomer = type == 'customer';
+    return ReportData(
+      title: isCustomer ? 'Customer outstanding' : 'Supplier outstanding',
+      columns: [
+        isCustomer ? 'Customer' : 'Supplier',
+        'Phone',
+        isCustomer ? 'To receive' : 'To pay',
+      ],
+      rows: out,
+      summary: ['Total: ${money(total)}'],
+    );
+  }
+
+  Future<ReportData> _accountReport(String kind, String from, String to) async {
+    final db = await _db;
+    final rows = await db.rawQuery('''
+      SELECT t.*, a.name AS account_name FROM account_txns t
+      JOIN accounts a ON a.id = t.account_id
+      WHERE a.kind = ? AND t.txn_date BETWEEN ? AND ?
+      ORDER BY t.txn_date, t.id
+    ''', [kind, from, to]);
+    var tin = 0.0, tout = 0.0;
+    final out = <List<String>>[];
+    for (final r in rows) {
+      final isIn = r['direction'] == 'in';
+      final amt = _d(r['amount']);
+      if (isIn) {
+        tin += amt;
+      } else {
+        tout += amt;
+      }
+      out.add([
+        r['txn_date'] as String,
+        r['account_name'] as String,
+        r['kind'] as String,
+        '${r['ref']} ${r['note']}'.trim(),
+        isIn ? money(amt) : '',
+        isIn ? '' : money(amt),
+      ]);
+    }
+    return ReportData(
+      title: '${kind == 'cash' ? 'Cash' : 'Bank'} report ($from to $to)',
+      columns: const ['Date', 'Account', 'Type', 'Details', 'In', 'Out'],
+      rows: out,
+      summary: [
+        'Money in: ${money(tin)}   Money out: ${money(tout)}   Net: ${money(tin - tout)}',
+      ],
+    );
+  }
+
+  Future<ReportData> _expenses(String from, String to) async {
+    final db = await _db;
+    final rows = await db.query(
+      'expenses',
+      where: 'expense_date BETWEEN ? AND ?',
+      whereArgs: [from, to],
+      orderBy: 'expense_date, id',
+    );
+    var total = 0.0;
+    final byCat = <String, double>{};
+    final out = <List<String>>[];
+    for (final r in rows) {
+      final amt = _d(r['amount']);
+      total += amt;
+      byCat[r['category'] as String] =
+          (byCat[r['category'] as String] ?? 0) + amt;
+      out.add([
+        r['expense_date'] as String,
+        r['category'] as String,
+        r['pay_mode'] as String,
+        r['notes'] as String,
+        money(amt),
+      ]);
+    }
+    return ReportData(
+      title: 'Expense report ($from to $to)',
+      columns: const ['Date', 'Category', 'Mode', 'Notes', 'Amount'],
+      rows: out,
+      summary: [
+        'Total expenses: ${money(total)}',
+        for (final e in byCat.entries) '${e.key}: ${money(e.value)}',
+      ],
+    );
+  }
+
+  Future<ReportData> _warranty() async {
+    final db = await _db;
+    final rows = await db.query(
+      'serials',
+      where: "warranty_expiry IS NOT NULL AND status = 'sold'",
+      orderBy: 'warranty_expiry',
+    );
+    final now = DateTime.now();
+    var active = 0, expiring = 0, expired = 0;
+    final out = <List<String>>[];
+    for (final r in rows) {
+      final st = warrantyState(r['warranty_expiry'] as String?, now);
+      final label = switch (st) {
+        WarrantyState.active => 'Active',
+        WarrantyState.expiring => 'Expiring soon',
+        WarrantyState.expired => 'Expired',
+        WarrantyState.none => '-',
+      };
+      switch (st) {
+        case WarrantyState.active:
+          active++;
+        case WarrantyState.expiring:
+          expiring++;
+        case WarrantyState.expired:
+          expired++;
+        case WarrantyState.none:
+          break;
+      }
+      out.add([
+        r['serial'] as String,
+        r['product_name'] as String,
+        r['customer_name'] as String,
+        (r['sold_date'] as String?) ?? '',
+        (r['warranty_expiry'] as String?) ?? '',
+        label,
+      ]);
+    }
+    return ReportData(
+      title: 'Warranty report',
+      columns: const ['Serial', 'Item', 'Customer', 'Sold', 'Expires', 'Status'],
+      rows: out,
+      summary: [
+        'Active: $active   Expiring soon: $expiring   Expired: $expired',
+      ],
+    );
+  }
+
+  Future<ReportData> _serials() async {
+    final db = await _db;
+    final rows = await db.query('serials', orderBy: 'id DESC');
+    return ReportData(
+      title: 'Serial number report',
+      columns: const ['Serial', 'Item', 'Status', 'Purchase', 'Sale', 'Customer'],
+      rows: [
+        for (final r in rows)
+          [
+            r['serial'] as String,
+            r['product_name'] as String,
+            r['status'] as String,
+            r['purchase_number'] as String,
+            r['sale_number'] as String,
+            r['customer_name'] as String,
+          ],
+      ],
+      summary: ['Total serial numbers: ${rows.length}'],
+    );
+  }
+}
