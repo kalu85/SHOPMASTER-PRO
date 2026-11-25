@@ -8,6 +8,7 @@ import '../../core/data/account_repository.dart';
 import '../../core/data/invoice_repository.dart';
 import '../../core/data/party_repository.dart';
 import '../../core/data/product_repository.dart';
+import '../../core/data/serial_repository.dart';
 import '../../core/data/settings_repository.dart';
 import '../../core/models/account.dart';
 import '../../core/models/serial.dart';
@@ -22,6 +23,7 @@ import 'line_dialog.dart';
 import 'pickers.dart';
 import 'invoice_pdf_screen.dart';
 import 'send_whatsapp_dialog.dart';
+import 'serial_scanner_screen.dart';
 
 /// Create a sales/purchase invoice, quotation or return.
 class InvoiceFormScreen extends StatefulWidget {
@@ -617,6 +619,14 @@ class _InvoiceFormScreenState extends State<InvoiceFormScreen> {
                 children: [
                   Text('Items', style: Theme.of(context).textTheme.titleMedium),
                   const Spacer(),
+                  if (_isSale && widget.docType == DocType.invoice && !_editing) ...[
+                    OutlinedButton.icon(
+                      onPressed: _scanSaleItem,
+                      icon: const Icon(Icons.qr_code_scanner_rounded),
+                      label: const Text('Scan'),
+                    ),
+                    const SizedBox(width: 8),
+                  ],
                   FilledButton.icon(
                     style: FilledButton.styleFrom(backgroundColor: _color),
                     onPressed: _addItem,
