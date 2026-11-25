@@ -101,6 +101,10 @@ class _ShopSettingsScreenState extends State<ShopSettingsScreen> {
       setState(() => _error = 'GSTIN looks wrong. It has 15 letters/digits.');
       return;
     }
+    if (_s.gstRegistrationType != 'not_registered' && gstin.isEmpty) {
+      setState(() => _error = 'Enter the GSTIN for a registered taxpayer');
+      return;
+    }
     final prefix = _prefix.text.trim().toUpperCase();
     if (prefix.isEmpty || !RegExp(r'^[A-Z0-9]{1,8}$').hasMatch(prefix)) {
       setState(() => _error = 'Invoice prefix: 1 to 8 letters or digits');
@@ -115,6 +119,8 @@ class _ShopSettingsScreenState extends State<ShopSettingsScreen> {
       address: _address.text.trim(),
       phone: _phone.text.trim(),
       gstin: gstin,
+      gstRegistrationType: _s.gstRegistrationType,
+      gstReturnFrequency: _s.gstReturnFrequency,
       bankName: _bank.text.trim(),
       accountNo: _accNo.text.trim(),
       ifsc: _ifsc.text.trim().toUpperCase(),
@@ -185,6 +191,58 @@ class _ShopSettingsScreenState extends State<ShopSettingsScreen> {
               controller: _gstin,
               textCapitalization: TextCapitalization.characters,
               decoration: _dec('GSTIN (shown on GST invoices only)'),
+            ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              value: _s.gstRegistrationType,
+              decoration: _dec('GST registration type'),
+              items: const [
+                DropdownMenuItem(
+                  value: 'not_registered',
+                  child: Text('Not registered / registration pending'),
+                ),
+                DropdownMenuItem(
+                  value: 'regular',
+                  child: Text('Regular taxpayer'),
+                ),
+                DropdownMenuItem(
+                  value: 'composition',
+                  child: Text('Composition taxpayer'),
+                ),
+              ],
+              onChanged: (value) {
+                if (value != null) {
+                  setState(() => _s =
+                      _s.copyWith(gstRegistrationType: value));
+                }
+              },
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'This is your saved selection, not a GST Portal verification. '
+              'Registered types require a GSTIN.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              value: _s.gstReturnFrequency,
+              decoration: _dec('Return preparation period preference'),
+              items: const [
+                DropdownMenuItem(value: 'monthly', child: Text('Monthly')),
+                DropdownMenuItem(value: 'quarterly', child: Text('Quarterly')),
+              ],
+              onChanged: (value) {
+                if (value != null) {
+                  setState(() => _s =
+                      _s.copyWith(gstReturnFrequency: value));
+                }
+              },
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Confirm the applicable filing scheme and period on the GST '
+              'Portal or with your CA before preparing a return.',
+              style: Theme.of(context).textTheme.bodySmall,
             ),
             const SizedBox(height: 20),
             Text('Bank and UPI (printed on sales invoices)',
