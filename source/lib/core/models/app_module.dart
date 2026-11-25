@@ -137,6 +137,14 @@ const List<AppModule> appModules = [
     summary: 'Shop profile, invoice design, numbering, GST settings.',
   ),
   AppModule(
+    id: 'help',
+    title: 'Shop Owner Assistant',
+    icon: Icons.support_agent_rounded,
+    color: AppColors.cyan,
+    phase: 1,
+    summary: 'Offline step-by-step help for using the app.',
+  ),
+  AppModule(
     id: 'search',
     title: 'Global Search',
     icon: Icons.search_rounded,
