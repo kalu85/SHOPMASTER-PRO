@@ -1,0 +1,60 @@
+name: Nightly Project Health Check
+
+on:
+  schedule:
+    # Runs daily at 02:00 India Standard Time (20:30 UTC).
+    - cron: "30 20 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nightly-health-check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  health-check:
+    name: Flutter analysis and tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify project files
+        run: test -f source/pubspec.yaml
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        working-directory: source
+        run: flutter pub get
+
+      - name: Analyze
+        working-directory: source
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
+
+      - name: Run tests
+        working-directory: source
+        run: flutter test
+
+      - name: Write run summary
+        if: always()
+        run: |
+          {
+            echo "## SHOPMASTER PRO nightly health check"
+            echo "- Commit: ${GITHUB_SHA}"
+            echo "- Workflow: analysis and automated tests"
+            echo "- Result: ${{ job.status }}"
+          } >> "$GITHUB_STEP_SUMMARY"
