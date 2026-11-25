@@ -593,12 +593,12 @@ class ReportRepository {
       }
     }
     for (final row in items) {
-      if ((row['is_gst'] as num).toInt() != 1 || row['kind'] != 'sale') continue;
+      if ((row['is_gst'] as num).toInt() != 1) continue;
       final sign = row['doc_type'] == 'return' ? -1.0 : 1.0;
       final hsn = (row['hsn'] as String? ?? '').trim();
       if (hsn.isEmpty) { missingHsn++; continue; }
       final rate = (row['gst_rate'] as num?)?.toInt() ?? 0;
-      final key = '$hsn / $rate%';
+      final key = '${row['kind'] == 'sale' ? 'SALES' : 'PURCHASES'} | $hsn / $rate%';
       final g = hsnTotals.putIfAbsent(key, () => {'taxable': 0, 'cgst': 0, 'sgst': 0, 'igst': 0});
       g['taxable'] = (g['taxable'] ?? 0) + sign * _d(row['taxable']);
       g['cgst'] = (g['cgst'] ?? 0) + sign * _d(row['cgst']);
@@ -619,7 +619,15 @@ class ReportRepository {
     out.add(['TAX SPLIT', 'Purchase ledger', 'CGST', money(purchaseCgst), 'SGST ${money(purchaseSgst)}; IGST ${money(purchaseIgst)} (not eligible ITC)']);
     for (final e in hsnTotals.entries) {
       final v = e.value;
-      out.add(['HSN SALES', '', e.key, money(v['taxable'] ?? 0), 'CGST ${money(v['cgst'] ?? 0)}; SGST ${money(v['sgst'] ?? 0)}; IGST ${money(v['igst'] ?? 0)}']);
+      out.add(['HSN ${e.key.startsWith('SALES') ? 'SALES' : 'PURCHASES'}', '', e.key, money(v['taxable'] ?? 0), 'CGST ${money(v['cgst'] ?? 0)}; SGST ${money(v['sgst'] ?? 0)}; IGST ${money(v['igst'] ?? 0)}']);
+    }
+    for (final inv in invoices.where((r) => r['kind'] == 'sale' && (r['is_gst'] as num).toInt() == 1)) {
+      final sign = inv['doc_type'] == 'return' ? -1.0 : 1.0;
+      final gstin = (inv['party_gstin'] as String? ?? '').trim();
+      out.add(['SALES REGISTER', inv['invoice_date'] as String? ?? '',
+        '${inv['number']} / ${inv['party_name']}',
+        money(sign * _d(inv['taxable_total'])),
+        'GSTIN ${gstin.isEmpty ? 'blank - verify B2C/B2B' : gstin}; CGST ${money(sign * _d(inv['cgst']))}; SGST ${money(sign * _d(inv['sgst']))}; IGST ${money(sign * _d(inv['igst']))}']);
     }
     for (final inv in invoices.where((r) => r['kind'] == 'purchase' && (r['is_gst'] as num).toInt() == 1)) {
       final sign = inv['doc_type'] == 'return' ? -1.0 : 1.0;
