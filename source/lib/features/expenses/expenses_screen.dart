@@ -172,6 +172,143 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
     await _load();
   }
 
+  Future<void> _edit(Expense expense) async {
+    if (_accounts.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Add a cash or bank account before editing this expense.')),
+      );
+      return;
+    }
+    String category = kExpenseCategories.contains(expense.category)
+        ? expense.category
+        : kExpenseCategories.last;
+    String mode = kPayModes.contains(expense.payMode) &&
+            expense.payMode != 'Credit'
+        ? expense.payMode
+        : 'Cash';
+    int? acc = _accounts.any((a) => a.id == expense.accountId)
+        ? expense.accountId
+        : _accounts.first.id;
+    DateTime date = DateTime.tryParse(expense.date) ?? DateTime.now();
+    final amount = TextEditingController(text: expense.amount.toString());
+    final note = TextEditingController(text: expense.notes);
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setS) => AlertDialog(
+          title: const Text('Edit expense'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                DropdownButtonFormField<String>(
+                  initialValue: category,
+                  decoration: _dec('Category'),
+                  items: [
+                    for (final c in kExpenseCategories)
+                      DropdownMenuItem(value: c, child: Text(c)),
+                  ],
+                  onChanged: (v) => setS(() => category = v ?? category),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: amount,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: _dec('Amount (₹)'),
+                ),
+                const SizedBox(height: 10),
+                DropdownButtonFormField<String>(
+                  initialValue: mode,
+                  decoration: _dec('Paid by'),
+                  items: [
+                    for (final m in kPayModes.where((m) => m != 'Credit'))
+                      DropdownMenuItem(value: m, child: Text(m)),
+                  ],
+                  onChanged: (v) => setS(() {
+                    mode = v ?? mode;
+                    final cash = _accounts.where((a) => a.isCash).toList();
+                    final banks = _accounts.where((a) => !a.isCash).toList();
+                    if (mode == 'Cash' && cash.isNotEmpty) acc = cash.first.id;
+                    if (mode != 'Cash' && banks.isNotEmpty) acc = banks.first.id;
+                  }),
+                ),
+                const SizedBox(height: 10),
+                DropdownButtonFormField<int>(
+                  key: ValueKey('edit-expense-acc-$acc'),
+                  initialValue: acc,
+                  decoration: _dec('Money goes out of'),
+                  items: [
+                    for (final a in _accounts)
+                      DropdownMenuItem(value: a.id, child: Text(a.name)),
+                  ],
+                  onChanged: (v) => setS(() => acc = v),
+                ),
+                const SizedBox(height: 10),
+                OutlinedButton.icon(
+                  onPressed: () async {
+                    final picked = await showDatePicker(
+                      context: ctx,
+                      initialDate: date,
+                      firstDate: DateTime(2000),
+                      lastDate: DateTime.now().add(const Duration(days: 365)),
+                    );
+                    if (picked != null) setS(() => date = picked);
+                  },
+                  icon: const Icon(Icons.calendar_today_rounded, size: 18),
+                  label: Text(dateFmt.format(date)),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: note,
+                  decoration: _dec('Note (optional)'),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Save changes'),
+            ),
+          ],
+        ),
+      ),
+    );
+    final amt = double.tryParse(amount.text.trim());
+    final n = note.text.trim();
+    amount.dispose();
+    note.dispose();
+    if (ok != true) return;
+    if (amt == null || !amt.isFinite || amt <= 0 || acc == null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Enter a valid amount greater than zero.')),
+      );
+      return;
+    }
+    try {
+      await AccountRepository.instance.updateExpense(
+        id: expense.id,
+        category: category,
+        date: isoDateFmt.format(date),
+        amount: amt,
+        accountId: acc!,
+        payMode: mode,
+        notes: n,
+      );
+      await _load();
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not update expense: $error')),
+      );
+    }
+  }
+
   Future<void> _delete(Expense e) async {
     final sure = await confirmDialog(context,
         title: 'Delete this expense?',
@@ -242,9 +379,13 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                                         style: const TextStyle(
                                             fontWeight: FontWeight.w800)),
                                     IconButton(
+                                      tooltip: 'Edit expense',
+                                      icon: const Icon(Icons.edit_outlined),
+                                      onPressed: () => _edit(e),
+                                    ),
+                                    IconButton(
                                       tooltip: 'Delete',
-                                      icon: const Icon(
-                                          Icons.delete_outline_rounded),
+                                      icon: const Icon(Icons.delete_outline_rounded),
                                       onPressed: () => _delete(e),
                                     ),
                                   ],
