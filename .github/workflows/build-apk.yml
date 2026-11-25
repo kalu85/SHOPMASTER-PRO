@@ -12,7 +12,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Unzip project
-        run: shopmaster_pro_final_all_updates.zip -d work
+        run: unzip -q shopmaster_pro_final_all_updates.zip -d work
 
       - uses: actions/setup-java@v4
         with:
