@@ -319,8 +319,14 @@ class InvoiceRepository {
     String number,
     String now,
   ) async {
-    final found =
-        await txn.query('serials', where: 'serial = ?', whereArgs: [serial]);
+    // Serial identifiers are case-insensitive: a scan or manual entry must
+    // not create a second record merely because letter casing differs.
+    final found = await txn.query(
+      'serials',
+      where: 'serial = ? COLLATE NOCASE',
+      whereArgs: [serial],
+      limit: 1,
+    );
     final row = found.isEmpty ? null : found.first;
     final isSale = draft.kind == InvoiceKind.sale;
     final isReturn = draft.docType == DocType.returnNote;
