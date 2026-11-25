@@ -184,6 +184,7 @@ class InvoiceItem {
     required this.amount,
     this.serials = '',
     this.warrantyMonths = 0,
+    this.purchaseRateSnapshot = 0,
   });
 
   final int? productId;
@@ -206,6 +207,9 @@ class InvoiceItem {
   /// the serial record only and are never printed on the invoice.
   final int warrantyMonths;
 
+  /// Product cost captured when this invoice line was saved.
+  final double purchaseRateSnapshot;
+
   factory InvoiceItem.fromMap(Map<String, Object?> m) => InvoiceItem(
         productId: m['product_id'] as int?,
         name: m['name'] as String,
@@ -221,6 +225,7 @@ class InvoiceItem {
         amount: (m['amount'] as num).toDouble(),
         serials: (m['serials'] as String?) ?? '',
         warrantyMonths: ((m['warranty_months'] as num?) ?? 0).toInt(),
+        purchaseRateSnapshot: ((m['purchase_rate_snapshot'] as num?) ?? 0).toDouble(),
       );
 
   Map<String, Object?> toMap(int invoiceId) => {
@@ -239,5 +244,6 @@ class InvoiceItem {
         'amount': amount,
         'serials': serials,
         'warranty_months': warrantyMonths,
+        'purchase_rate_snapshot': purchaseRateSnapshot,
       };
 }
