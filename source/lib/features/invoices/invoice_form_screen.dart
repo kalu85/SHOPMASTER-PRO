@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:path/path.dart' as path;
 import '../../core/data/invoice_attachment_repository.dart';
 
 import '../../core/data/account_repository.dart';
@@ -258,6 +260,17 @@ class _InvoiceFormScreenState extends State<InvoiceFormScreen> {
       }
     }
     return null;
+  }
+
+  Future<void> _takePurchaseBillPhoto() async {
+    final photo = await ImagePicker().pickImage(
+      source: ImageSource.camera, imageQuality: 88, maxWidth: 2200,
+    );
+    if (photo == null || !mounted) return;
+    final file = PlatformFile(
+      name: path.basename(photo.path), size: await photo.length(), path: photo.path,
+    );
+    if (mounted) setState(() => _purchaseBillFiles.add(file));
   }
 
   Future<void> _pickPurchaseBills() async {
@@ -580,7 +593,9 @@ class _InvoiceFormScreenState extends State<InvoiceFormScreen> {
                         const Icon(Icons.attach_file_rounded),
                         const SizedBox(width: 8),
                         const Expanded(child: Text('Supplier bill attachments', style: TextStyle(fontWeight: FontWeight.w700))),
-                        OutlinedButton.icon(onPressed: _pickPurchaseBills, icon: const Icon(Icons.add_rounded), label: const Text('Add files')),
+                        OutlinedButton.icon(onPressed: _takePurchaseBillPhoto, icon: const Icon(Icons.camera_alt_rounded), label: const Text('Camera')),
+                        const SizedBox(width: 6),
+                        OutlinedButton.icon(onPressed: _pickPurchaseBills, icon: const Icon(Icons.attach_file_rounded), label: const Text('Files')),
                       ]),
                       if (_purchaseBillFiles.isNotEmpty) ...[
                         const SizedBox(height: 8),
