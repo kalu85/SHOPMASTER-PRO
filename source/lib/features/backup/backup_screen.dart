@@ -8,6 +8,7 @@ import '../../core/services/backup_service.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/format.dart';
 import '../../core/widgets/confirm_dialog.dart';
+import 'google_drive_backup_card.dart';
 
 /// Backup & Restore (local). Cloud backup is not part of this version.
 class BackupScreen extends StatefulWidget {
@@ -160,13 +161,14 @@ class _BackupScreenState extends State<BackupScreen> {
               ),
             ),
             const SizedBox(height: 12),
+            const GoogleDriveBackupCard(),
+            const SizedBox(height: 12),
             Card(
               color: AppColors.lightBlue,
               child: const Padding(
                 padding: EdgeInsets.all(16),
                 child: Text(
-                  'Backups are stored on this phone only. Cloud backup (Google Drive / Firebase) is not set up in this version. '
-                  'To keep your data safe if the phone is lost, tap the share icon on a backup and send it to Google Drive or WhatsApp.',
+                  'Local backups remain on this phone. Use the Google Drive section above to upload a separate cloud copy or restore one.',
                 ),
               ),
             ),
