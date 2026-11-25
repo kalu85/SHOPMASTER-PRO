@@ -8,6 +8,7 @@ import '../../core/widgets/confirm_dialog.dart';
 import 'adjust_stock_dialog.dart';
 import 'product_form_screen.dart';
 import 'stock_history_screen.dart';
+import 'smart_inventory_card.dart';
 
 /// Items and Stock module (amber department colour).
 class StockScreen extends StatefulWidget {
@@ -134,6 +135,10 @@ class _StockScreenState extends State<StockScreen> {
                     ),
                   ),
                 ),
+              ),
+              const Padding(
+                padding: EdgeInsets.fromLTRB(16, 8, 16, 4),
+                child: SmartInventoryCard(),
               ),
               Expanded(child: _content()),
             ],
