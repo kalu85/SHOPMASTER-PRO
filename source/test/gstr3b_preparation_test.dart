@@ -19,3 +19,11 @@ void main() {
     expect(report.title, contains('working paper'));
   });
 }
+
+
+test('GSTIN format check accepts standard shape and rejects malformed values', () {
+  expect(isGstinFormatValid('27AAPFU0939F1ZV'), isTrue);
+  expect(isGstinFormatValid('27AAPFU0939F1Z'), isFalse);
+  expect(isGstinFormatValid('not-a-gstin'), isFalse);
+  expect(isGstinFormatValid('27aapfu0939f1zv'), isTrue);
+});
