@@ -9,6 +9,8 @@ class ShopSettings {
     this.address = '',
     this.phone = '',
     this.gstin = '',
+    this.gstRegistrationType = 'not_registered',
+    this.gstReturnFrequency = 'monthly',
     this.bankName = '',
     this.accountNo = '',
     this.ifsc = '',
@@ -26,6 +28,10 @@ class ShopSettings {
   final String address;
   final String phone;
   final String gstin;
+  /// User-selected profile only; this does not verify GST registration.
+  final String gstRegistrationType;
+  /// Preparation preference; actual due dates/eligibility come from GST Portal.
+  final String gstReturnFrequency;
   final String bankName;
   final String accountNo;
   final String ifsc;
@@ -43,6 +49,8 @@ class ShopSettings {
     String? address,
     String? phone,
     String? gstin,
+    String? gstRegistrationType,
+    String? gstReturnFrequency,
     String? bankName,
     String? accountNo,
     String? ifsc,
@@ -60,6 +68,8 @@ class ShopSettings {
         address: address ?? this.address,
         phone: phone ?? this.phone,
         gstin: gstin ?? this.gstin,
+        gstRegistrationType: gstRegistrationType ?? this.gstRegistrationType,
+        gstReturnFrequency: gstReturnFrequency ?? this.gstReturnFrequency,
         bankName: bankName ?? this.bankName,
         accountNo: accountNo ?? this.accountNo,
         ifsc: ifsc ?? this.ifsc,
@@ -78,6 +88,8 @@ class ShopSettings {
         'address': address,
         'phone': phone,
         'gstin': gstin,
+        'gst_registration_type': gstRegistrationType,
+        'gst_return_frequency': gstReturnFrequency,
         'bank_name': bankName,
         'account_no': accountNo,
         'ifsc': ifsc,
@@ -98,6 +110,8 @@ class ShopSettings {
       address: m['address'] ?? d.address,
       phone: m['phone'] ?? d.phone,
       gstin: m['gstin'] ?? d.gstin,
+      gstRegistrationType: m['gst_registration_type'] ?? d.gstRegistrationType,
+      gstReturnFrequency: m['gst_return_frequency'] ?? d.gstReturnFrequency,
       bankName: m['bank_name'] ?? d.bankName,
       accountNo: m['account_no'] ?? d.accountNo,
       ifsc: m['ifsc'] ?? d.ifsc,
