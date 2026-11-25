@@ -11,8 +11,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Unzip project
-        run: unzip -q shopmaster_pro_final_all_updates.zip -d work
+      - name: Prepare project
+        run: test -f source/pubspec.yaml
 
       - uses: actions/setup-java@v4
         with:
@@ -25,7 +25,7 @@ jobs:
           cache: true
 
       - name: Generate Android folder
-        working-directory: work/shopmaster_pro
+        working-directory: source
         run: flutter create --platforms=android --project-name shopmaster_pro --org com.shopmaster .
 
       - name: Get packages
@@ -45,11 +45,11 @@ jobs:
 
       - name: Analyze (report only)
         working-directory: work/shopmaster_pro
-        run: flutter analyze || true
+        run: flutter analyze
 
       - name: Test (report only)
         working-directory: work/shopmaster_pro
-        run: flutter test || true
+        run: flutter test
 
       - name: Raise compileSdk to 36 (app and all plugins)
         working-directory: work/shopmaster_pro
@@ -79,4 +79,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: shopmaster-pro-apk
-          path: work/shopmaster_pro/build/app/outputs/flutter-apk/app-release.apk
+          path: source/build/app/outputs/flutter-apk/app-release.apk
