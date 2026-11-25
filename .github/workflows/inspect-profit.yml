@@ -1,0 +1,17 @@
+name: Inspect SHOPMASTER profit implementation
+on:
+  workflow_dispatch:
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Print profit-related source
+        run: |
+          unzip -q shopmaster_pro_final_all_updates.zip -d work
+          cd work/shopmaster_pro
+          for f in lib/core/data/report_repository.dart lib/core/data/invoice_repository.dart lib/core/models/invoice.dart lib/core/models/invoice_item.dart lib/core/models/product.dart lib/features/reports/reports_screen.dart lib/features/dashboard/dashboard_screen.dart lib/features/invoices/line_dialog.dart lib/features/invoices/invoice_form_screen.dart; do
+            if [ -f "$f" ]; then echo "===== $f ====="; cat "$f"; fi
+          done
+          echo '=== ACTUAL PATHS ==='
+          find lib -type f | sort
