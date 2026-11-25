@@ -190,6 +190,18 @@ class PartyRepository {
     return entries.map((e) => e.$3).toList();
   }
 
+  /// Unpaid customer sale invoices for an itemised collection reminder.
+  Future<List<Map<String, Object?>>> outstandingInvoices(int partyId) async {
+    final db = await _db;
+    return db.query(
+      'invoices',
+      columns: ['number', 'invoice_date', 'due'],
+      where: "party_id = ? AND kind = 'sale' AND doc_type = 'invoice' AND due > 0.009",
+      whereArgs: [partyId],
+      orderBy: 'invoice_date ASC, id ASC',
+    );
+  }
+
   /// Customers who owe money, biggest first (for payment reminders).
   Future<List<Party>> withDues(PartyType type) async {
     final db = await _db;
