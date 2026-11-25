@@ -1,9 +1,6 @@
 name: Nightly Project Health Check
 
 on:
-  schedule:
-    # Runs daily at 02:00 PM India Standard Time (08:30 UTC).
-    - cron: "30 8 * * *"
   workflow_dispatch:
 
 permissions:
