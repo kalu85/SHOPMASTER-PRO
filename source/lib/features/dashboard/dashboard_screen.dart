@@ -128,10 +128,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
         ];
 
-        return ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            _QuickActions(onOpenModule: onOpenModule),
+        return RefreshIndicator(
+          onRefresh: _load,
+          child: ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.all(16),
+            children: [
+            _QuickActions(onOpenModule: onOpenModule, onRefresh: _load),
             const SizedBox(height: 16),
             const ProfitOverviewCard(),
             const SizedBox(height: 16),
@@ -171,7 +174,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
               ],
             ),
-          ],
+            ],
+          ),
         );
       },
     );
@@ -179,9 +183,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
 }
 
 class _QuickActions extends StatelessWidget {
-  const _QuickActions({required this.onOpenModule});
+  const _QuickActions({required this.onOpenModule, required this.onRefresh});
 
   final void Function(String moduleId) onOpenModule;
+  final Future<void> Function() onRefresh;
 
   @override
   Widget build(BuildContext context) {
@@ -225,6 +230,12 @@ class _QuickActions extends StatelessWidget {
             onPressed: () => onOpenModule('help'),
             icon: const Icon(Icons.support_agent_rounded),
             label: const Text('How to use app'),
+          ),
+          OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(foregroundColor: AppColors.white, side: const BorderSide(color: AppColors.cyan)),
+            onPressed: onRefresh,
+            icon: const Icon(Icons.refresh_rounded),
+            label: const Text('Refresh dashboard'),
           ),
         ],
       ),
