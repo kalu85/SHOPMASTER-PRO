@@ -963,5 +963,3 @@ class ReportRepository {
     );
   }
 }
-)
-        .hasMatch(value.trim().toUpperCase());
