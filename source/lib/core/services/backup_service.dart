@@ -55,7 +55,13 @@ class BackupService {
     final dest =
         File(p.join(dir.path, 'shopmaster_${label}_${_stamp(DateTime.now())}.db'));
     await src.copy(dest.path);
-    // Re-open lazily on next use and record the time.
+    // Verify the copied SQLite database before marking the backup successful.
+    // Remove an invalid copy so it cannot be mistaken for a usable backup.
+    if (!await looksLikeDatabase(dest)) {
+      if (await dest.exists()) await dest.delete();
+      throw BackupException('Backup verification failed. No backup was saved.');
+    }
+    // Record the backup time only after verification succeeds.
     await SettingsRepository.instance
         .setValue('last_backup', DateTime.now().toIso8601String());
     if (label == 'auto') await _pruneAutomatic();
