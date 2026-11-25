@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'serial_scanner_screen.dart';
+
 import '../../core/models/product.dart';
 import '../../core/utils/format.dart';
 import '../../core/utils/serials.dart';
@@ -134,6 +136,16 @@ class _LineDialogState extends State<_LineDialog> {
     super.dispose();
   }
 
+  Future<void> _scanSerial() async {
+    final value = await Navigator.of(context).push<String>(
+      MaterialPageRoute(builder: (_) => const SerialScannerScreen()),
+    );
+    if (value == null || !mounted) return;
+    final current = parseSerials(_serials.text);
+    if (!current.contains(value)) current.add(value);
+    _serials.text = current.join(', ');
+  }
+
   void _ok() {
     final qty = double.tryParse(_qty.text.trim());
     final rate = double.tryParse(_rate.text.trim());
@@ -262,13 +274,26 @@ class _LineDialogState extends State<_LineDialog> {
             ],
             if (widget.showSerials) ...[
               const SizedBox(height: 12),
-              TextField(
-                controller: _serials,
-                minLines: 2,
-                maxLines: 5,
-                decoration: _dec('Serial numbers (optional)').copyWith(
-                  helperText: 'One per line or separated by commas',
-                ),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _serials,
+                      minLines: 2,
+                      maxLines: 5,
+                      decoration: _dec('Serial numbers (optional)').copyWith(
+                        helperText: 'Type manually or scan a barcode / QR code',
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  IconButton.filledTonal(
+                    tooltip: 'Scan serial number',
+                    onPressed: _scanSerial,
+                    icon: const Icon(Icons.qr_code_scanner_rounded),
+                  ),
+                ],
               ),
             ],
             if (widget.showWarranty) ...[
