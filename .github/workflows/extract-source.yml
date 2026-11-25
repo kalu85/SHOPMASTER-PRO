@@ -1,0 +1,30 @@
+name: Extract editable Flutter source
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+permissions:
+  contents: write
+jobs:
+  extract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Extract source tree
+        run: |
+          unzip -q shopmaster_pro_final_all_updates.zip -d work
+          test -f work/shopmaster_pro/pubspec.yaml
+          mkdir -p source
+          cp -a work/shopmaster_pro/. source/
+          rm -rf source/.dart_tool source/build
+      - name: Commit editable source
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add source
+          if git diff --cached --quiet; then
+            echo "Source tree already exists"
+          else
+            git commit -m "Add editable Flutter source tree"
+            git push
+          fi
