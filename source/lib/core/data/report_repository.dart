@@ -656,7 +656,7 @@ class ReportRepository {
         'GST sales documents: $gstSaleDocs; GST purchase documents: $gstPurchaseDocs; returns: $returns; non-GST documents: $nonGstDocs',
         'Recorded output tax: ${money(salesCgst + salesSgst + salesIgst)} (CGST ${money(salesCgst)}, SGST ${money(salesSgst)}, IGST ${money(salesIgst)})',
         'Purchase-side GST recorded: ${money(purchaseCgst + purchaseSgst + purchaseIgst)} — not treated as eligible ITC.',
-        'Missing HSN sales lines: $missingHsn; sales invoices with blank party GSTIN: $missingGstin; catalogue items without HSN: ${productsWithoutHsn.length}',
+        'GST document lines with missing HSN: $missingHsn; sales invoices with blank party GSTIN: $missingGstin; catalogue items without HSN: ${productsWithoutHsn.length}',
         'CA must reconcile purchase invoices with GST Portal GSTR-2B and verify ITC, reverse charge, exempt/nil/zero-rated supplies, place of supply, amendments and other adjustments.',
         'This report uses only records saved in SHOPMASTER PRO. It is a CA working-paper pack, not an official GSTR-1/GSTR-3B, GSTN data, or a filed return.',
       ],
