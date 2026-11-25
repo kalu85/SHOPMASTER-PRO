@@ -335,7 +335,7 @@ class ReportRepository {
       final gst = cgst + sgst + igst;
 
       if (!isGst) {
-        nonGstDocuments.add(number);
+        nonGstDocuments.add('${row['kind']}:$number');
         nonGstValue += sign * _d(row['taxable']);
         continue;
       }
@@ -434,6 +434,7 @@ class ReportRepository {
         'GST document lines with blank party GSTIN (check B2B/B2C): $blankPartyGstin',
         'Products without HSN in item catalogue: ${productsWithoutHsn.length}',
         'Non-GST documents in selected period: ${nonGstDocuments.length}; taxable base recorded: ${money(nonGstValue)}',
+        'Non-GST records are not automatically exempt; CA should classify pre-registration, exempt and other supplies.',
         'Returns are deducted from their respective sales or purchase totals.',
         'Working paper only: not an official GSTR-1 / GSTR-3B return. CA must verify classification, exemptions, ITC eligibility and filing.',
       ],
