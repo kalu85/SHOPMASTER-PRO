@@ -9,6 +9,11 @@ class DuplicateBarcodeException implements Exception {
   String toString() => 'This barcode is already used by another item.';
 }
 
+class StockChangedException implements Exception {
+  const StockChangedException(this.currentStock);
+  final double currentStock;
+}
+
 class ProductRepository {
   ProductRepository._();
   static final ProductRepository instance = ProductRepository._();
@@ -120,9 +125,22 @@ class ProductRepository {
     required double change,
     required String reason,
     String note = '',
+    double? expectedCurrentStock,
   }) async {
     final db = await _db;
     await db.transaction((txn) async {
+      final rows = await txn.query(
+        'products',
+        columns: ['current_stock'],
+        where: 'id = ?',
+        whereArgs: [productId],
+        limit: 1,
+      );
+      if (rows.isEmpty) throw StateError('Item no longer exists.');
+      final currentStock = (rows.first['current_stock'] as num).toDouble();
+      if (expectedCurrentStock != null && currentStock != expectedCurrentStock) {
+        throw StockChangedException(currentStock);
+      }
       await txn.rawUpdate(
         'UPDATE products SET current_stock = current_stock + ? WHERE id = ?',
         [change, productId],
