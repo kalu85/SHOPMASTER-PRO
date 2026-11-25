@@ -92,16 +92,25 @@ class SerialRepository {
     final s = serial.trim();
     if (s.isEmpty) throw SerialException('Enter a serial number');
     final db = await _db;
-    final exists = await db.query('serials', where: 'serial = ?', whereArgs: [s]);
-    if (exists.isNotEmpty) {
-      throw SerialException('Serial "$s" already exists');
-    }
-    await db.insert('serials', {
-      'serial': s,
-      'product_id': productId,
-      'product_name': productName,
-      'status': 'in_stock',
-      'created_at': DateTime.now().toIso8601String(),
+    await db.transaction((txn) async {
+      // Match the same case-insensitive rule used by invoice serial handling.
+      // Keep the check and insert together so two registrations cannot race.
+      final exists = await txn.query(
+        'serials',
+        where: 'serial = ? COLLATE NOCASE',
+        whereArgs: [s],
+        limit: 1,
+      );
+      if (exists.isNotEmpty) {
+        throw SerialException('Serial "$s" already exists');
+      }
+      await txn.insert('serials', {
+        'serial': s,
+        'product_id': productId,
+        'product_name': productName,
+        'status': 'in_stock',
+        'created_at': DateTime.now().toIso8601String(),
+      });
     });
   }
 
