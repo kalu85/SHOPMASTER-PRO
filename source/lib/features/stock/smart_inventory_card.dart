@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../core/db/app_database.dart';
 import '../../core/models/product.dart';
@@ -111,6 +112,26 @@ class _SmartInventoryCardState extends State<SmartInventoryCard> {
     }
   }
 
+  Future<void> _copyReorderList() async {
+    if (_reorder.isEmpty) return;
+    final buffer = StringBuffer('SHOPMASTER PRO - PURCHASE REORDER LIST\n');
+    buffer.writeln('Prepared: ${DateTime.now().toLocal().toString().substring(0, 16)}');
+    buffer.writeln();
+    for (final entry in _bySupplier.entries) {
+      buffer.writeln(entry.key);
+      for (final line in entry.value) {
+        buffer.writeln('  • $line');
+      }
+      buffer.writeln();
+    }
+    buffer.writeln('Please confirm availability and rates before ordering.');
+    await Clipboard.setData(ClipboardData(text: buffer.toString()));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Supplier-wise reorder list copied.')),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Card(
@@ -144,8 +165,15 @@ class _SmartInventoryCardState extends State<SmartInventoryCard> {
             ]),
             const SizedBox(height: 12),
             if (_reorder.isNotEmpty) ...[
-              const Text('Suggested reorder',
-                  style: TextStyle(fontWeight: FontWeight.w700)),
+              Row(children: [
+                const Expanded(child: Text('Suggested reorder',
+                    style: TextStyle(fontWeight: FontWeight.w700))),
+                OutlinedButton.icon(
+                  onPressed: _copyReorderList,
+                  icon: const Icon(Icons.copy_rounded, size: 17),
+                  label: const Text('Copy list'),
+                ),
+              ]),
               for (final item in _reorder.take(8))
                 ListTile(
                   dense: true,
