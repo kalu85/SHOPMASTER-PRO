@@ -37,3 +37,6 @@ String warrantyLabel(int months) {
   }
   return '$months months';
 }
+
+/// Canonical comparison key for serial identifiers (case-insensitive).
+String serialKey(String serial) => serial.trim().toLowerCase();

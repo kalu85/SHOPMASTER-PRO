@@ -2,6 +2,13 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shopmaster_pro/core/utils/serials.dart';
 
 void main() {
+  group('serialKey', () {
+    test('trims and compares serial identifiers without letter-case differences', () {
+      expect(serialKey('  AbC-123  '), 'abc-123');
+      expect(serialKey('ABC-123'), serialKey('abc-123'));
+    });
+  });
+
   group('parseSerials', () {
     test('splits on commas, new lines and semicolons and trims', () {
       expect(parseSerials('A1, B2\nC3;  D4 ,, '), ['A1', 'B2', 'C3', 'D4']);
