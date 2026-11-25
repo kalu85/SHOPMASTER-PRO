@@ -25,7 +25,7 @@ class AppDatabase {
     if (existing != null) return existing;
     final opened = await openDatabase(
       await path,
-      version: 4,
+      version: 5,
       onConfigure: (d) async {
         await d.execute('PRAGMA foreign_keys = ON');
       },
@@ -39,6 +39,7 @@ class AppDatabase {
         if (oldVersion < 2) await _createV2(d);
         if (oldVersion < 3) await _upgradeToV3(d);
         if (oldVersion < 4) await _upgradeToV4(d);
+        if (oldVersion < 5) await _upgradeToV5(d);
       },
     );
     _db = opened;
@@ -150,7 +151,8 @@ class AppDatabase {
         cgst REAL NOT NULL DEFAULT 0,
         sgst REAL NOT NULL DEFAULT 0,
         igst REAL NOT NULL DEFAULT 0,
-        amount REAL NOT NULL DEFAULT 0
+        amount REAL NOT NULL DEFAULT 0,
+        purchase_rate_snapshot REAL NOT NULL DEFAULT 0
       )
     ''');
     await d.execute(
@@ -163,6 +165,11 @@ class AppDatabase {
         value INTEGER NOT NULL
       )
     ''');
+  }
+
+  /// v5: preserve each item's purchase cost at the time of sale.
+  Future<void> _upgradeToV5(Database d) async {
+    await d.execute('ALTER TABLE invoice_items ADD COLUMN purchase_rate_snapshot REAL NOT NULL DEFAULT 0');
   }
 
   /// v4: the usual supplier of an item.
