@@ -289,7 +289,7 @@ class ReportRepository {
       FROM invoices WHERE kind = 'sale' AND doc_type != 'quotation' AND invoice_date BETWEEN ? AND ?
     ''', [from, to]);
     final cogs = await db.rawQuery('''
-      SELECT COALESCE(SUM(CASE i.doc_type WHEN 'invoice' THEN ii.qty * p.purchase_rate WHEN 'return' THEN -ii.qty * p.purchase_rate ELSE 0 END), 0) AS t
+      SELECT COALESCE(SUM(CASE i.doc_type WHEN 'invoice' THEN ii.qty * COALESCE(NULLIF(ii.purchase_rate_snapshot, 0), p.purchase_rate, 0) WHEN 'return' THEN -ii.qty * COALESCE(NULLIF(ii.purchase_rate_snapshot, 0), p.purchase_rate, 0) ELSE 0 END), 0) AS t
       FROM invoice_items ii
       JOIN invoices i ON i.id = ii.invoice_id
       LEFT JOIN products p ON p.id = ii.product_id
@@ -314,7 +314,7 @@ class ReportRepository {
         ['Net profit', money(net)],
       ],
       summary: const [
-        'Cost of goods sold uses each item\'s CURRENT purchase rate, so it is an estimate.',
+        'New invoices use the purchase cost saved on each line. Older invoices without a saved cost fall back to the current product purchase rate and remain estimates.',
       ],
     );
   }
