@@ -1,4 +1,9 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../core/data/serial_repository.dart';
 import '../../core/models/product.dart';
@@ -43,6 +48,36 @@ class _SerialScreenState extends State<SerialScreen> {
       _rows = r;
       _loading = false;
     });
+  }
+
+  String _csvCell(Object? value) {
+    final text = value?.toString() ?? '';
+    return '"\${text.replaceAll('"', '""')}"';
+  }
+
+  Future<void> _exportCsv() async {
+    if (_rows.isEmpty) return;
+    final lines = <String>[
+      [
+        'Serial number', 'Product', 'Status', 'Purchase invoice', 'Sale invoice',
+        'Customer', 'Customer phone', 'Sold date', 'Warranty months',
+        'Warranty start', 'Warranty expiry',
+      ].map(_csvCell).join(','),
+      for (final r in _rows)
+        [
+          r.serial, r.productName, r.statusLabel, r.purchaseNumber, r.saleNumber,
+          r.customerName, r.customerPhone, r.soldDate, r.warrantyMonths,
+          r.warrantyStart, r.warrantyExpiry,
+        ].map(_csvCell).join(','),
+    ];
+    final directory = await getTemporaryDirectory();
+    final file = File(p.join(directory.path, 'shopmaster_serial_register.csv'));
+    await file.writeAsString('\uFEFF\${lines.join('\n')}');
+    await Share.shareXFiles(
+      [XFile(file.path, mimeType: 'text/csv')],
+      subject: 'SHOPMASTER PRO serial register',
+      text: 'Serial register export (\${_rows.length} records)',
+    );
   }
 
   Future<void> _add() async {
@@ -159,6 +194,24 @@ class _SerialScreenState extends State<SerialScreen> {
                       },
                     ),
                   ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    _loading ? 'Loading serials...' : '\${_rows.length} serial records (up to 300)',
+                    style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
+                  ),
+                ),
+                TextButton.icon(
+                  onPressed: _loading || _rows.isEmpty ? null : _exportCsv,
+                  icon: const Icon(Icons.file_download_outlined),
+                  label: const Text('Export CSV'),
+                ),
               ],
             ),
           ),
