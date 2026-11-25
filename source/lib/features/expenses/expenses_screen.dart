@@ -54,7 +54,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
   String _csvCell(Object? value) {
     var text = value?.toString() ?? '';
     // Prevent spreadsheet formula execution from user-entered notes/categories.
-    if (RegExp(r'^\\s*[=+@-]').hasMatch(text)) text = "'$text";
+    if (RegExp(r'^\s*[=+@-]').hasMatch(text)) text = "'$text";
     return '"${text.replaceAll('"', '""')}"';
   }
 
@@ -90,7 +90,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
       final filename =
           'expenses_${isoDateFmt.format(_range!.start)}_to_${isoDateFmt.format(_range!.end)}.csv';
       final file = File(p.join(directory.path, filename));
-      await file.writeAsString('${lines.join('\\r\\n')}\\r\\n', flush: true);
+      await file.writeAsString('${lines.join('\r\n')}\r\n', flush: true);
       await Share.shareXFiles(
         [XFile(file.path, mimeType: 'text/csv')],
         subject: 'Shop expenses',
