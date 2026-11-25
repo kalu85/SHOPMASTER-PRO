@@ -50,6 +50,33 @@ class _AdjustStockDialogState extends State<_AdjustStockDialog> {
       setState(() => _error = 'Enter a quantity greater than zero');
       return;
     }
+    final change = _add ? q : -q;
+    final projectedStock = widget.product.currentStock + change;
+    if (projectedStock < 0) {
+      final proceed = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Stock will become negative'),
+          content: Text(
+            'Current stock: ${fmtQty(widget.product.currentStock)}\\n'
+            'Adjustment: ${change > 0 ? '+' : ''}${fmtQty(change)}\\n'
+            'New stock: ${fmtQty(projectedStock)}\\n\\n'
+            'Do you want to save this adjustment anyway?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Review'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('Save anyway'),
+            ),
+          ],
+        ),
+      );
+      if (proceed != true || !mounted) return;
+    }
     setState(() {
       _saving = true;
       _error = null;
@@ -57,7 +84,7 @@ class _AdjustStockDialogState extends State<_AdjustStockDialog> {
     try {
       await ProductRepository.instance.adjustStock(
         productId: widget.product.id!,
-        change: _add ? q : -q,
+        change: change,
         reason: _reason,
         note: _note.text.trim(),
       );
