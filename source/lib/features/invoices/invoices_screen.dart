@@ -218,12 +218,89 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
         ),
       );
     }
+    final totalValue = _items.fold<double>(
+      0,
+      (sum, inv) => sum + inv.grandTotal,
+    );
+    final totalDue = _items.fold<double>(
+      0,
+      (sum, inv) => sum + (inv.docType == DocType.quotation ? 0 : inv.due),
+    );
     return ListView.separated(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
-      itemCount: _items.length,
+      itemCount: _items.length + 1,
       separatorBuilder: (_, __) => const SizedBox(height: 8),
       itemBuilder: (context, i) {
-        final inv = _items[i];
+        if (i == 0) {
+          return Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '${_items.length} ${_tabLabel(_doc).toLowerCase()} found',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.textMuted,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('Total document value'),
+                            const SizedBox(height: 3),
+                            Text(
+                              inr.format(totalValue),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w800,
+                                fontSize: 18,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (_doc != DocType.quotation)
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              const Text('Outstanding due'),
+                              const SizedBox(height: 3),
+                              Text(
+                                inr.format(totalDue),
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 18,
+                                  color: AppColors.reports,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                    ],
+                  ),
+                  if (_search.text.isNotEmpty)
+                    const Padding(
+                      padding: EdgeInsets.only(top: 6),
+                      child: Text(
+                        'Totals reflect the current search results.',
+                        style: TextStyle(
+                          color: AppColors.textMuted,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          );
+        }
+        final inv = _items[i - 1];
         final party = inv.partyName.isEmpty
             ? (_isSale ? 'Walk-in customer' : 'No supplier')
             : inv.partyName;
