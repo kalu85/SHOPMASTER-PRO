@@ -24,6 +24,52 @@ class PartyRepository {
 
   Future<Database> get _db => AppDatabase.instance.db;
 
+  /// Accept only real calendar dates in yyyy-MM-dd format.
+  static bool _isIsoDate(String value) {
+    if (value.length != 10 || value[4] != '-' || value[7] != '-') {
+      return false;
+    }
+    final parsed = DateTime.tryParse(value);
+    return parsed != null &&
+        parsed.year.toString().padLeft(4, '0') == value.substring(0, 4) &&
+        parsed.month.toString().padLeft(2, '0') == value.substring(5, 7) &&
+        parsed.day.toString().padLeft(2, '0') == value.substring(8, 10);
+  }
+
+  /// Validate customer/supplier data before it reaches SQLite.
+  static void validateParty(Party party, {bool requireId = false}) {
+    if (party.name.trim().isEmpty) {
+      throw ArgumentError('Customer/supplier name cannot be blank.');
+    }
+    if (requireId && (party.id == null || party.id! <= 0)) {
+      throw ArgumentError('A valid customer/supplier ID is required for updates.');
+    }
+    if (!party.openingBalance.isFinite || !party.currentBalance.isFinite) {
+      throw ArgumentError('Party balances must be finite numbers.');
+    }
+  }
+
+  /// Validate a receipt/payment before changing party and cash/bank balances.
+  static void validatePayment({
+    required int partyId,
+    required double amount,
+    required int accountId,
+    required String payMode,
+    required String date,
+  }) {
+    if (partyId <= 0) throw ArgumentError('Choose a valid customer/supplier.');
+    if (accountId <= 0) throw ArgumentError('Choose a valid cash/bank account.');
+    if (!amount.isFinite || amount <= 0) {
+      throw ArgumentError.value(amount, 'amount', 'Must be finite and greater than zero.');
+    }
+    if (payMode.trim().isEmpty) {
+      throw ArgumentError('Payment mode cannot be blank.');
+    }
+    if (!_isIsoDate(date)) {
+      throw ArgumentError('Payment date must be a valid yyyy-MM-dd date.');
+    }
+  }
+
   Future<Party?> byId(int id) async {
     final db = await _db;
     final rows = await db.query('parties', where: 'id = ?', whereArgs: [id]);
@@ -51,6 +97,7 @@ class PartyRepository {
   }
 
   Future<int> insert(Party p) async {
+    validateParty(p);
     final db = await _db;
     return db.insert('parties', {
       'type': p.type.name,
@@ -67,6 +114,7 @@ class PartyRepository {
 
   /// Updates contact details only. Balances change through transactions.
   Future<void> update(Party p) async {
+    validateParty(p, requireId: true);
     final db = await _db;
     await db.update(
       'parties',
@@ -105,11 +153,20 @@ class PartyRepository {
     required String date,
     String note = '',
   }) async {
+    validatePayment(
+      partyId: partyId,
+      amount: amount,
+      accountId: accountId,
+      payMode: payMode,
+      date: date,
+    );
     final db = await _db;
     await db.transaction((txn) async {
       final rows =
           await txn.query('parties', where: 'id = ?', whereArgs: [partyId]);
-      if (rows.isEmpty) return;
+      if (rows.isEmpty) {
+        throw StateError('Customer/supplier was not found. No payment was recorded.');
+      }
       final isCustomer = rows.first['type'] == 'customer';
       final now = DateTime.now().toIso8601String();
       await txn.insert('party_payments', {
