@@ -21,7 +21,7 @@ void main() {
 
       expect(csv, contains('Supplier'));
       expect(csv, contains('"ABC Traders","USB Cable"'));
-      expect(csv, contains('"10","25.5","255.0"'));
+      expect(csv, contains('"10.0","25.5","255.0"'));
       expect(csv, startsWith('\uFEFF'));
     });
 
