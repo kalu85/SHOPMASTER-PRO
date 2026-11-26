@@ -112,6 +112,28 @@ String? gstinFormatReview(String value) {
   return null;
 }
 
+/// Validates report date filters as real ISO calendar dates in ascending order.
+void validateReportDateRange(String from, String to) {
+  DateTime? parse(String value) {
+    if (!RegExp(r'^[0-9]{4}-[0-9]{2}-[0-9]{2}$').hasMatch(value)) return null;
+    final parsed = DateTime.tryParse(value);
+    if (parsed == null ||
+        parsed.year.toString().padLeft(4, '0') != value.substring(0, 4) ||
+        parsed.month.toString().padLeft(2, '0') != value.substring(5, 7) ||
+        parsed.day.toString().padLeft(2, '0') != value.substring(8, 10)) {
+      return null;
+    }
+    return parsed;
+  }
+  final start = parse(from);
+  final end = parse(to);
+  if (start == null || end == null) {
+    throw ArgumentError('Report dates must be valid yyyy-MM-dd calendar dates.');
+  }
+  if (end.isBefore(start)) {
+    throw ArgumentError('Report end date must be on or after the start date.');
+  }
+}
 class ReportRepository {
   ReportRepository._();
   static final ReportRepository instance = ReportRepository._();
