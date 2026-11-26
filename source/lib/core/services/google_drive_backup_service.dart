@@ -113,16 +113,16 @@ class GoogleDriveBackupService {
     final folderId = await _folder();
     final token = await _accessToken();
     final boundary = 'shopmaster_${DateTime.now().microsecondsSinceEpoch}';
-    final metadata = jsonEncode({
+    final metadataJson = jsonEncode({
       'name': p.basename(backup.path),
       'mimeType': 'application/x-sqlite3',
       'parents': [folderId],
     });
     final bytes = await backup.readAsBytes();
-    final expectedMd5 = (await crypto.md5.bind(backup.openRead())).toString();
+    final expectedMd5 = (await crypto.md5.bind(backup.openRead()).first).toString();
     final prefix = utf8.encode('--$boundary\r\n'
         'Content-Type: application/json; charset=UTF-8\r\n\r\n'
-        '$metadata\r\n'
+        '$metadataJson\r\n'
         '--$boundary\r\n'
         'Content-Type: application/x-sqlite3\r\n\r\n');
     final suffix = utf8.encode('\r\n--$boundary--');
@@ -142,12 +142,12 @@ class GoogleDriveBackupService {
     if (response.statusCode != 200 && response.statusCode != 201) {
       throw Exception('Google Drive upload failed (' + response.statusCode.toString() + ').');
     }
-    final metadata = jsonDecode(response.body) as Map<String, dynamic>;
+    final uploadedMetadata = jsonDecode(response.body) as Map<String, dynamic>;
     if (!uploadMetadataMatches(
       expectedName: p.basename(backup.path),
       expectedSize: bytes.length,
       expectedMd5: expectedMd5,
-      metadata: metadata,
+      metadata: uploadedMetadata,
     )) {
       throw Exception(
         'Google Drive received the file, but its size or checksum did not match. Upload verification failed.',
