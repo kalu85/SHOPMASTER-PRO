@@ -500,6 +500,7 @@ class ReportRepository {
       final isGst = (row['is_gst'] as num).toInt() == 1;
       final number = row['number'] as String? ?? '';
       final itemName = row['item_name'] as String? ?? '';
+      final hasItemLine = row['item_name'] != null;
       final hsn = (row['hsn'] as String? ?? '').trim();
       final rate = (row['gst_rate'] as num?)?.toInt() ?? 0;
       final taxable = sign * _d(row['taxable']);
@@ -520,7 +521,9 @@ class ReportRepository {
         purchaseTax += gst;
       }
 
-      if (hsn.isEmpty) {
+      if (!hasItemLine) {
+        // The document-level reconciliation below flags invoices with no lines.
+      } else if (hsn.isEmpty) {
         missingHsn++;
         review.add([
           'REVIEW',
