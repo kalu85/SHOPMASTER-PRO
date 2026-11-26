@@ -138,7 +138,7 @@ class BackupService {
     await backupNow(label: 'before_restore');
     final dbPath = await AppDatabase.instance.path;
     final staged = File(
-      '$dbPath.restore_\${DateTime.now().microsecondsSinceEpoch}.tmp',
+      '$dbPath.restore_${DateTime.now().microsecondsSinceEpoch}.tmp',
     );
 
     try {
