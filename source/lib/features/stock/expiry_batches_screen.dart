@@ -1,7 +1,13 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../core/db/app_database.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/utils/expiry_report_export.dart';
 
 /// Review expiry dates recorded on purchase invoice lines.
 /// Quantities shown are original purchased line quantities, not live batch balances.
@@ -29,6 +35,38 @@ class _ExpiryBatchesScreenState extends State<ExpiryBatchesScreen> {
   }
 
   void _refresh() => setState(() => _future = _load());
+
+  Future<void> _export(List<Map<String, Object?>> rows, DateTime today) async {
+    try {
+      final csv = buildExpiryReportCsv(
+        preparedAt: DateTime.now(),
+        rows: [
+          for (final row in rows)
+            ExpiryExportRow(
+              item: row['name'] as String? ?? 'Item',
+              batchNumber: row['batch_number'] as String? ?? '',
+              purchasedQuantity: (row['qty'] as num?)?.toDouble() ?? 0,
+              purchaseInvoice: row['invoice_number'] as String? ?? '',
+              supplier: row['party_name'] as String? ?? '',
+              expiryDate: row['expiry_date'] as String? ?? '',
+              daysLeft: _daysLeft(row, today),
+            ),
+        ],
+      );
+      final directory = await getTemporaryDirectory();
+      final file = File(p.join(directory.path, 'shopmaster_batch_expiry.csv'));
+      await file.writeAsString(csv, flush: true);
+      await Share.shareXFiles(
+        [XFile(file.path, mimeType: 'text/csv')],
+        subject: 'SHOPMASTER PRO batch expiry report',
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not export the expiry report.')),
+      );
+    }
+  }
 
   int? _daysLeft(Map<String, Object?> row, DateTime today) {
     final expiry = DateTime.tryParse(row['expiry_date'] as String? ?? '');
@@ -103,7 +141,28 @@ class _ExpiryBatchesScreenState extends State<ExpiryBatchesScreen> {
           }).length;
           final visible = rows.where((r) => _matches(r, today)).toList();
 
-          return ListView(
+          return Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'Export applies the selected filter: $_filter',
+                        style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+                      ),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: visible.isEmpty ? null : () => _export(visible, today),
+                      icon: const Icon(Icons.file_download_outlined),
+                      label: const Text('Export CSV'),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: ListView(
             padding: const EdgeInsets.all(12),
             children: [
               Wrap(spacing: 8, runSpacing: 8, children: [
@@ -179,6 +238,9 @@ class _ExpiryBatchesScreenState extends State<ExpiryBatchesScreen> {
                     ),
                   );
                 }),
+            ],
+                ),
+              ),
             ],
           );
         },
