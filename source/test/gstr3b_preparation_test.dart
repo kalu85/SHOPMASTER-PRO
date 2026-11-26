@@ -60,4 +60,36 @@ void main() {
     });
   });
 
+  group('GST line tax calculation review', () {
+    test('accepts tax matching taxable value and GST rate', () {
+      expect(gstLineTaxAmountMismatch(
+        taxable: 1000, gstRate: 18, cgst: 90, sgst: 90, igst: 0,
+      ), isFalse);
+    });
+
+    test('accepts differences within two paise', () {
+      expect(gstLineTaxAmountMismatch(
+        taxable: 1000, gstRate: 18, cgst: 90.01, sgst: 89.99, igst: 0,
+      ), isFalse);
+    });
+
+    test('flags tax totals that do not match the GST rate', () {
+      expect(gstLineTaxAmountMismatch(
+        taxable: 1000, gstRate: 18, cgst: 90, sgst: 89.97, igst: 0,
+      ), isTrue);
+    });
+
+    test('flags invalid or non-finite line inputs', () {
+      expect(gstLineTaxAmountMismatch(
+        taxable: -1, gstRate: 18, cgst: 0, sgst: 0, igst: 0,
+      ), isTrue);
+      expect(gstLineTaxAmountMismatch(
+        taxable: 1000, gstRate: 101, cgst: 0, sgst: 0, igst: 0,
+      ), isTrue);
+      expect(gstLineTaxAmountMismatch(
+        taxable: double.infinity, gstRate: 18, cgst: 90, sgst: 90, igst: 0,
+      ), isTrue);
+    });
+  });
+
 }

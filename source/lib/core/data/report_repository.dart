@@ -158,6 +158,26 @@ bool gstDocumentTotalsMismatch({
       (pair.$1 - pair.$2).abs() > tolerance);
 }
 
+/// Flags GST lines whose stored tax differs from taxable value × rate.
+/// This is a review aid; it does not infer intra/inter-state tax allocation.
+bool gstLineTaxAmountMismatch({
+  required double taxable,
+  required double gstRate,
+  required double cgst,
+  required double sgst,
+  required double igst,
+}) {
+  const tolerance = 0.02;
+  final values = [taxable, gstRate, cgst, sgst, igst];
+  if (values.any((value) => !value.isFinite || value < 0) || gstRate > 100) {
+    return true;
+  }
+  final expectedTax = taxable * gstRate / 100;
+  final recordedTax = cgst + sgst + igst;
+  if (!expectedTax.isFinite || !recordedTax.isFinite) return true;
+  return (expectedTax - recordedTax).abs() > tolerance;
+}
+
 class ReportRepository {
   ReportRepository._();
   static final ReportRepository instance = ReportRepository._();
@@ -474,6 +494,7 @@ class ReportRepository {
     var missingHsn = 0;
     var blankPartyGstin = 0;
     var malformedPartyGstin = 0;
+    var gstLineTaxMismatches = 0;
     final documentTotals = <int, Map<String, double>>{};
     final documentNumbers = <int, String>{};
 
@@ -519,6 +540,24 @@ class ReportRepository {
         outputTax += gst;
       } else {
         purchaseTax += gst;
+      }
+
+      if (hasItemLine && gstLineTaxAmountMismatch(
+        taxable: _d(row['taxable']),
+        gstRate: (row['gst_rate'] as num?)?.toDouble() ?? 0,
+        cgst: _d(row['cgst']),
+        sgst: _d(row['sgst']),
+        igst: _d(row['igst']),
+      )) {
+        gstLineTaxMismatches++;
+        review.add([
+          'GST TAX REVIEW', number,
+          '$itemName: recorded CGST + SGST + IGST does not match taxable value × GST rate within ₹0.02; verify source invoice',
+          money(_d(row['taxable'])),
+          money(_d(row['cgst'])),
+          money(_d(row['sgst'])),
+          money(_d(row['igst'])),
+        ]);
       }
 
       if (!hasItemLine) {
@@ -644,6 +683,7 @@ class ReportRepository {
         'GST document lines with missing HSN: $missingHsn',
         'GST document lines with blank party GSTIN (check B2B/B2C): $blankPartyGstin',
         'GST document lines with malformed party GSTIN format: $malformedPartyGstin',
+        'GST document lines with tax-rate arithmetic differences (over ₹0.02): $gstLineTaxMismatches',
         'Documents with header/line total mismatches (over 0.02 tolerance): $mismatchedDocuments',
         'Products without HSN in item catalogue: ${productsWithoutHsn.length}',
         'Non-GST documents in selected period: ${nonGstDocuments.length}; taxable base recorded: ${money(nonGstValue)}',
