@@ -104,6 +104,14 @@ bool isGstinFormatValid(String value) {
       RegExp(r'^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]').hasMatch(normalized);
 }
 
+/// Returns a review reason for a party GSTIN, or null when its shape is valid.
+/// This is a format check only; registration must be verified separately.
+String? gstinFormatReview(String value) {
+  if (value.trim().isEmpty) return 'GSTIN is blank';
+  if (!isGstinFormatValid(value)) return 'GSTIN format is unexpected';
+  return null;
+}
+
 class ReportRepository {
   ReportRepository._();
   static final ReportRepository instance = ReportRepository._();
@@ -417,6 +425,7 @@ class ReportRepository {
     var nonGstValue = 0.0;
     var missingHsn = 0;
     var blankPartyGstin = 0;
+    var malformedPartyGstin = 0;
 
     for (final row in rows) {
       final isSale = row['kind'] == 'sale';
@@ -474,12 +483,24 @@ class ReportRepository {
       }
 
       final gstin = (row['party_gstin'] as String? ?? '').trim();
-      if (gstin.isEmpty) {
+      final gstinIssue = gstinFormatReview(gstin);
+      if (gstinIssue == 'GSTIN is blank') {
         blankPartyGstin++;
         review.add([
           'REVIEW',
           number,
           'Party GSTIN is blank; confirm whether this is B2C or GSTIN details are needed',
+          '',
+          '',
+          '',
+          '',
+        ]);
+      } else if (gstinIssue != null) {
+        malformedPartyGstin++;
+        review.add([
+          'REVIEW',
+          number,
+          'Party GSTIN has an unexpected format: $gstin; verify it against the official GST Portal',
           '',
           '',
           '',
@@ -531,6 +552,7 @@ class ReportRepository {
         'Difference before CA adjustments: ${money(outputTax - purchaseTax)}',
         'GST document lines with missing HSN: $missingHsn',
         'GST document lines with blank party GSTIN (check B2B/B2C): $blankPartyGstin',
+        'GST document lines with malformed party GSTIN format: $malformedPartyGstin',
         'Products without HSN in item catalogue: ${productsWithoutHsn.length}',
         'Non-GST documents in selected period: ${nonGstDocuments.length}; taxable base recorded: ${money(nonGstValue)}',
         'Non-GST records are not automatically exempt; CA should classify pre-registration, exempt and other supplies.',

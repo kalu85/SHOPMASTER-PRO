@@ -25,4 +25,11 @@ void main() {
     expect(isGstinFormatValid('not-a-gstin'), isFalse);
     expect(isGstinFormatValid('27aapfu0939f1zv'), isTrue);
   });
+  test('GSTIN format review distinguishes blank and malformed values', () {
+    expect(gstinFormatReview('27AAPFU0939F1ZV'), isNull);
+    expect(gstinFormatReview('27aapfu0939f1zv'), isNull);
+    expect(gstinFormatReview('  '), 'GSTIN is blank');
+    expect(gstinFormatReview('27AAPFU0939F1Z'), 'GSTIN format is unexpected');
+  });
+
 }
