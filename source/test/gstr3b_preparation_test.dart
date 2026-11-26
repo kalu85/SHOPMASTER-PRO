@@ -32,4 +32,32 @@ void main() {
     expect(gstinFormatReview('27AAPFU0939F1Z'), 'GSTIN format is unexpected');
   });
 
+  group('GST invoice header and line reconciliation', () {
+    test('accepts matching totals within the two-paise tolerance', () {
+      expect(gstDocumentTotalsMismatch(
+        headerTaxable: 1000, headerCgst: 90, headerSgst: 90,
+        headerIgst: 0, headerTotal: 1180,
+        linesTaxable: 1000, linesCgst: 90.01, linesSgst: 89.99,
+        linesIgst: 0, linesTotal: 1180,
+      ), isFalse);
+    });
+
+    test('flags a difference larger than the tolerance', () {
+      expect(gstDocumentTotalsMismatch(
+        headerTaxable: 1000, headerCgst: 90, headerSgst: 90,
+        headerIgst: 0, headerTotal: 1180,
+        linesTaxable: 999.97, linesCgst: 90, linesSgst: 90,
+        linesIgst: 0, linesTotal: 1179.97,
+      ), isTrue);
+    });
+
+    test('flags non-finite values rather than hiding them', () {
+      expect(gstDocumentTotalsMismatch(
+        headerTaxable: double.infinity, headerCgst: 0, headerSgst: 0,
+        headerIgst: 0, headerTotal: 0, linesTaxable: 0, linesCgst: 0,
+        linesSgst: 0, linesIgst: 0, linesTotal: 0,
+      ), isTrue);
+    });
+  });
+
 }

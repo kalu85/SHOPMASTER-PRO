@@ -134,6 +134,30 @@ void validateReportDateRange(String from, String to) {
     throw ArgumentError('Report end date must be on or after the start date.');
   }
 }
+/// Returns true when saved invoice header totals differ from summed line totals.
+/// A two-paise tolerance accommodates per-line rounding.
+bool gstDocumentTotalsMismatch({
+  required double headerTaxable,
+  required double headerCgst,
+  required double headerSgst,
+  required double headerIgst,
+  required double headerTotal,
+  required double linesTaxable,
+  required double linesCgst,
+  required double linesSgst,
+  required double linesIgst,
+  required double linesTotal,
+}) {
+  const tolerance = 0.02;
+  final pairs = <(double, double)>[
+    (headerTaxable, linesTaxable), (headerCgst, linesCgst),
+    (headerSgst, linesSgst), (headerIgst, linesIgst),
+    (headerTotal, linesTotal),
+  ];
+  return pairs.any((pair) => !pair.$1.isFinite || !pair.$2.isFinite ||
+      (pair.$1 - pair.$2).abs() > tolerance);
+}
+
 class ReportRepository {
   ReportRepository._();
   static final ReportRepository instance = ReportRepository._();
@@ -429,11 +453,13 @@ class ReportRepository {
   Future<ReportData> _gstReadiness(String from, String to) async {
     final db = await _db;
     final rows = await db.rawQuery('''
-      SELECT i.kind, i.doc_type, i.number, i.invoice_date, i.party_name,
-        i.party_gstin, i.is_gst, ii.name AS item_name, ii.hsn, ii.gst_rate,
-        ii.taxable, ii.cgst, ii.sgst, ii.igst
+      SELECT i.id, i.kind, i.doc_type, i.number, i.invoice_date, i.party_name,
+        i.party_gstin, i.is_gst, i.taxable_total AS header_taxable,
+        i.cgst AS header_cgst, i.sgst AS header_sgst, i.igst AS header_igst,
+        i.grand_total AS header_total, ii.name AS item_name, ii.hsn, ii.gst_rate,
+        ii.taxable, ii.cgst, ii.sgst, ii.igst, ii.amount AS line_total
       FROM invoices i
-      JOIN invoice_items ii ON ii.invoice_id = i.id
+      LEFT JOIN invoice_items ii ON ii.invoice_id = i.id
       WHERE i.doc_type != 'quotation'
         AND i.invoice_date BETWEEN ? AND ?
       ORDER BY i.invoice_date, i.number, ii.id
@@ -448,14 +474,33 @@ class ReportRepository {
     var missingHsn = 0;
     var blankPartyGstin = 0;
     var malformedPartyGstin = 0;
+    final documentTotals = <int, Map<String, double>>{};
+    final documentNumbers = <int, String>{};
 
     for (final row in rows) {
+      final documentId = (row['id'] as num).toInt();
+      documentNumbers[documentId] = row['number'] as String? ?? 'ID $documentId';
+      final totals = documentTotals.putIfAbsent(documentId, () => {
+        'headerTaxable': _d(row['header_taxable']),
+        'headerCgst': _d(row['header_cgst']),
+        'headerSgst': _d(row['header_sgst']),
+        'headerIgst': _d(row['header_igst']),
+        'headerTotal': _d(row['header_total']),
+        'linesTaxable': 0.0, 'linesCgst': 0.0, 'linesSgst': 0.0,
+        'linesIgst': 0.0, 'linesTotal': 0.0,
+      });
+      totals['linesTaxable'] = totals['linesTaxable']! + _d(row['taxable']);
+      totals['linesCgst'] = totals['linesCgst']! + _d(row['cgst']);
+      totals['linesSgst'] = totals['linesSgst']! + _d(row['sgst']);
+      totals['linesIgst'] = totals['linesIgst']! + _d(row['igst']);
+      totals['linesTotal'] = totals['linesTotal']! + _d(row['line_total']);
       final isSale = row['kind'] == 'sale';
       final isReturn = row['doc_type'] == 'return';
       final sign = isReturn ? -1.0 : 1.0;
       final isGst = (row['is_gst'] as num).toInt() == 1;
       final number = row['number'] as String? ?? '';
       final itemName = row['item_name'] as String? ?? '';
+      final hasItemLine = row['item_name'] != null;
       final hsn = (row['hsn'] as String? ?? '').trim();
       final rate = (row['gst_rate'] as num?)?.toInt() ?? 0;
       final taxable = sign * _d(row['taxable']);
@@ -476,7 +521,9 @@ class ReportRepository {
         purchaseTax += gst;
       }
 
-      if (hsn.isEmpty) {
+      if (!hasItemLine) {
+        // The document-level reconciliation below flags invoices with no lines.
+      } else if (hsn.isEmpty) {
         missingHsn++;
         review.add([
           'REVIEW',
@@ -531,6 +578,28 @@ class ReportRepository {
       }
     }
 
+    var mismatchedDocuments = 0;
+    for (final entry in documentTotals.entries) {
+      final totals = entry.value;
+      if (gstDocumentTotalsMismatch(
+        headerTaxable: totals['headerTaxable']!, headerCgst: totals['headerCgst']!,
+        headerSgst: totals['headerSgst']!, headerIgst: totals['headerIgst']!,
+        headerTotal: totals['headerTotal']!, linesTaxable: totals['linesTaxable']!,
+        linesCgst: totals['linesCgst']!, linesSgst: totals['linesSgst']!,
+        linesIgst: totals['linesIgst']!, linesTotal: totals['linesTotal']!,
+      )) {
+        mismatchedDocuments++;
+        review.add([
+          'TOTAL MISMATCH', documentNumbers[entry.key] ?? 'ID ${entry.key}',
+          'Invoice header totals differ from summed saved item lines; inspect before CA reconciliation',
+          money(totals['headerTaxable']! - totals['linesTaxable']!),
+          money(totals['headerCgst']! - totals['linesCgst']!),
+          money(totals['headerSgst']! - totals['linesSgst']!),
+          money(totals['headerIgst']! - totals['linesIgst']!),
+        ]);
+      }
+    }
+
     final productsWithoutHsn = await db.rawQuery('''
       SELECT name FROM products
       WHERE is_service = 0 AND TRIM(COALESCE(hsn, '')) = ''
@@ -575,6 +644,7 @@ class ReportRepository {
         'GST document lines with missing HSN: $missingHsn',
         'GST document lines with blank party GSTIN (check B2B/B2C): $blankPartyGstin',
         'GST document lines with malformed party GSTIN format: $malformedPartyGstin',
+        'Documents with header/line total mismatches (over 0.02 tolerance): $mismatchedDocuments',
         'Products without HSN in item catalogue: ${productsWithoutHsn.length}',
         'Non-GST documents in selected period: ${nonGstDocuments.length}; taxable base recorded: ${money(nonGstValue)}',
         'Non-GST records are not automatically exempt; CA should classify pre-registration, exempt and other supplies.',
