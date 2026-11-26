@@ -33,11 +33,68 @@ class InvoiceRepository {
   static bool moneyComesIn(InvoiceKind k, DocType d) =>
       stockDirection(k, d) == -1;
 
+  /// Rejects malformed numeric input at the repository boundary so callers
+  /// cannot persist NaN, infinity, negative money, or zero/negative quantities.
+  static void validateDocument(Invoice draft, List<InvoiceItem> items) {
+    bool finiteNonNegative(double value) =>
+        value.isFinite && value >= 0;
+
+    final headerValues = <double>[
+      draft.subtotal,
+      draft.discountTotal,
+      draft.taxableTotal,
+      draft.cgst,
+      draft.sgst,
+      draft.igst,
+      draft.grandTotal,
+      draft.paid,
+    ];
+    if (headerValues.any((value) => !finiteNonNegative(value))) {
+      throw ArgumentError(
+        'Invoice totals, taxes, discount and paid amount must be finite and non-negative.',
+      );
+    }
+
+    for (var index = 0; index < items.length; index++) {
+      final item = items[index];
+      if (item.name.trim().isEmpty) {
+        throw ArgumentError('Invoice item ${index + 1} needs a name.');
+      }
+      if (!item.qty.isFinite || item.qty <= 0) {
+        throw ArgumentError(
+          'Quantity for "${item.name}" must be greater than zero.',
+        );
+      }
+      final values = <double>[
+        item.rate,
+        item.discount,
+        item.taxable,
+        item.cgst,
+        item.sgst,
+        item.igst,
+        item.amount,
+        item.purchaseRateSnapshot,
+      ];
+      if (values.any((value) => !finiteNonNegative(value))) {
+        throw ArgumentError(
+          'Amounts for "${item.name}" must be finite and non-negative.',
+        );
+      }
+      if (item.gstRate < 0 || item.gstRate > 100) {
+        throw ArgumentError('GST rate for "${item.name}" must be between 0 and 100.');
+      }
+      if (item.warrantyMonths < 0) {
+        throw ArgumentError('Warranty months for "${item.name}" cannot be negative.');
+      }
+    }
+  }
+
   /// Saves the document, updates stock, serials, the party balance and the
   /// cash/bank account, all in one transaction (all or nothing).
   /// Returns the new document number. Throws [SerialException] if a serial
   /// number breaks a rule; nothing is saved in that case.
   Future<String> create(Invoice draft, List<InvoiceItem> items) async {
+    validateDocument(draft, items);
     final db = await _db;
     return db.transaction((txn) async {
       final now = DateTime.now().toIso8601String();
@@ -288,6 +345,7 @@ class InvoiceRepository {
   /// effects are undone and the new ones applied in one transaction, so a
   /// failure (for example a serial problem) changes nothing.
   Future<void> update(int id, Invoice draft, List<InvoiceItem> items) async {
+    validateDocument(draft, items);
     final db = await _db;
     await db.transaction((txn) async {
       final rows =
