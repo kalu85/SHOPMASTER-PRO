@@ -459,7 +459,7 @@ class ReportRepository {
         i.grand_total AS header_total, ii.name AS item_name, ii.hsn, ii.gst_rate,
         ii.taxable, ii.cgst, ii.sgst, ii.igst, ii.amount AS line_total
       FROM invoices i
-      JOIN invoice_items ii ON ii.invoice_id = i.id
+      LEFT JOIN invoice_items ii ON ii.invoice_id = i.id
       WHERE i.doc_type != 'quotation'
         AND i.invoice_date BETWEEN ? AND ?
       ORDER BY i.invoice_date, i.number, ii.id
@@ -475,9 +475,11 @@ class ReportRepository {
     var blankPartyGstin = 0;
     var malformedPartyGstin = 0;
     final documentTotals = <int, Map<String, double>>{};
+    final documentNumbers = <int, String>{};
 
     for (final row in rows) {
       final documentId = (row['id'] as num).toInt();
+      documentNumbers[documentId] = row['number'] as String? ?? 'ID $documentId';
       final totals = documentTotals.putIfAbsent(documentId, () => {
         'headerTaxable': _d(row['header_taxable']),
         'headerCgst': _d(row['header_cgst']),
@@ -585,7 +587,7 @@ class ReportRepository {
       )) {
         mismatchedDocuments++;
         review.add([
-          'TOTAL MISMATCH', 'Document ID ${entry.key}',
+          'TOTAL MISMATCH', documentNumbers[entry.key] ?? 'ID ${entry.key}',
           'Invoice header totals differ from summed saved item lines; inspect before CA reconciliation',
           money(totals['headerTaxable']! - totals['linesTaxable']!),
           money(totals['headerCgst']! - totals['linesCgst']!),
