@@ -29,7 +29,7 @@ String buildStockReorderCsv({
   required List<StockReorderCsvRow> rows,
   required DateTime preparedAt,
 }) {
-final output = StringBuffer()
+  final output = StringBuffer()
     ..write('\uFEFF')
     ..writeln([
       'Prepared on',
