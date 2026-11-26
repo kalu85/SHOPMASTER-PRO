@@ -78,6 +78,102 @@ void main() {
     });
   });
 
+  group('InvoiceRepository document validation', () {
+    const validInvoice = Invoice(
+      kind: InvoiceKind.sale,
+      docType: DocType.invoice,
+      isGst: true,
+      invoiceDate: '2026-11-26',
+      subtotal: 100,
+      discountTotal: 0,
+      taxableTotal: 100,
+      cgst: 9,
+      sgst: 9,
+      igst: 0,
+      grandTotal: 118,
+      paid: 50,
+    );
+
+    const validItem = InvoiceItem(
+      name: 'Phone',
+      qty: 1,
+      rate: 100,
+      taxable: 100,
+      amount: 118,
+    );
+
+    test('accepts valid invoice data', () {
+      expect(
+        () => InvoiceRepository.validateDocument(validInvoice, [validItem]),
+        returnsNormally,
+      );
+    });
+
+    test('rejects zero and negative quantities', () {
+      for (final quantity in [0.0, -1.0]) {
+        expect(
+          () => InvoiceRepository.validateDocument(
+            validInvoice,
+            [InvoiceItem(
+              name: 'Phone',
+              qty: quantity,
+              rate: 100,
+              taxable: 100,
+              amount: 100,
+            )],
+          ),
+          throwsArgumentError,
+        );
+      }
+    });
+
+    test('rejects non-finite and negative money values', () {
+      for (final amount in [double.nan, double.infinity, -1.0]) {
+        expect(
+          () => InvoiceRepository.validateDocument(
+            validInvoice,
+            [InvoiceItem(
+              name: 'Phone',
+              qty: 1,
+              rate: amount,
+              taxable: 100,
+              amount: 100,
+            )],
+          ),
+          throwsArgumentError,
+        );
+      }
+    });
+
+    test('rejects invalid GST rates and blank item names', () {
+      expect(
+        () => InvoiceRepository.validateDocument(validInvoice, [
+          const InvoiceItem(
+            name: 'Phone',
+            qty: 1,
+            rate: 100,
+            gstRate: 101,
+            taxable: 100,
+            amount: 100,
+          ),
+        ]),
+        throwsArgumentError,
+      );
+      expect(
+        () => InvoiceRepository.validateDocument(validInvoice, [
+          const InvoiceItem(
+            name: '  ',
+            qty: 1,
+            rate: 100,
+            taxable: 100,
+            amount: 100,
+          ),
+        ]),
+        throwsArgumentError,
+      );
+    });
+  });
+
   test('invoice due is rounded to two decimal places', () {
     const invoice = Invoice(
       kind: InvoiceKind.sale,
