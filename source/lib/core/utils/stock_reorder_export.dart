@@ -1,3 +1,5 @@
+import 'csv_safety.dart';
+
 /// CSV export for the supplier-wise stock reorder worksheet.
 class StockReorderCsvRow {
   const StockReorderCsvRow({
@@ -27,9 +29,6 @@ String buildStockReorderCsv({
   required List<StockReorderCsvRow> rows,
   required DateTime preparedAt,
 }) {
-  String cell(Object? value) =>
-      '"${value.toString().replaceAll('"', '""')}"';
-
   final output = StringBuffer()
     ..write('\uFEFF')
     ..writeln([
@@ -42,7 +41,7 @@ String buildStockReorderCsv({
       'Suggested order quantity',
       'Purchase rate (INR)',
       'Estimated cost (INR)',
-    ].map(cell).join(','));
+    ].map(csvSafeCell).join(','));
 
   for (final row in rows) {
     output.writeln([
@@ -55,7 +54,7 @@ String buildStockReorderCsv({
       row.suggestedOrderQty,
       row.purchaseRate,
       row.estimatedCost,
-    ].map(cell).join(','));
+    ].map(csvSafeCell).join(','));
   }
   return output.toString();
 }

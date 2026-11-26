@@ -2,6 +2,7 @@ import 'package:sqflite/sqflite.dart';
 
 import '../db/app_database.dart';
 import '../models/invoice.dart';
+import '../utils/csv_safety.dart';
 import '../utils/serials.dart';
 
 enum ReportType {
@@ -76,23 +77,16 @@ class ReportData {
 
   /// Spreadsheet-friendly CSV (opens in Excel / Google Sheets).
   String toCsv() {
-    String esc(String s) {
-      if (s.contains(',') || s.contains('"') || s.contains('\n')) {
-        return '"${s.replaceAll('"', '""')}"';
-      }
-      return s;
-    }
-
     final b = StringBuffer();
-    b.writeln(esc(title));
-    b.writeln(columns.map(esc).join(','));
+    b.writeln(csvSafeCell(title));
+    b.writeln(csvSafeRow(columns));
     for (final r in rows) {
-      b.writeln(r.map(esc).join(','));
+      b.writeln(csvSafeRow(r));
     }
     if (summary.isNotEmpty) {
       b.writeln();
       for (final s in summary) {
-        b.writeln(esc(s));
+        b.writeln(csvSafeCell(s));
       }
     }
     return b.toString();
