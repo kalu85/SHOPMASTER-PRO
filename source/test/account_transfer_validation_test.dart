@@ -3,12 +3,21 @@ import 'package:shopmaster_pro/core/data/account_repository.dart';
 
 void main() {
   group('AccountRepository transfer validation', () {
+    test('rejects impossible transfer dates', () {
+      expect(
+        () => AccountRepository.validateTransfer(
+          fromId: 1, toId: 2, amount: 10, date: '2026-02-30',
+        ),
+        throwsArgumentError,
+      );
+    });
     test('accepts a positive finite transfer between different accounts', () {
       expect(
         () => AccountRepository.validateTransfer(
           fromId: 1,
           toId: 2,
           amount: 125.50,
+          date: '2026-11-26',
         ),
         returnsNormally,
       );
@@ -20,6 +29,7 @@ void main() {
           fromId: 1,
           toId: 1,
           amount: 100,
+          date: '2026-11-26',
         ),
         throwsArgumentError,
       );
@@ -31,6 +41,7 @@ void main() {
           fromId: 0,
           toId: 2,
           amount: 100,
+          date: '2026-11-26',
         ),
         throwsArgumentError,
       );
@@ -43,6 +54,7 @@ void main() {
             fromId: 1,
             toId: 2,
             amount: amount,
+            date: '2026-11-26',
           ),
           throwsArgumentError,
         );
@@ -56,6 +68,7 @@ void main() {
             fromId: 1,
             toId: 2,
             amount: amount,
+            date: '2026-11-26',
           ),
           throwsArgumentError,
         );
