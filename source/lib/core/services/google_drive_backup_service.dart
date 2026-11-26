@@ -2,10 +2,13 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:crypto/crypto.dart' as crypto;
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
+
+import 'backup_service.dart';
 
 /// Google Drive backup using the restricted drive.file OAuth scope.
 class GoogleDriveBackupService {
@@ -84,8 +87,29 @@ class GoogleDriveBackupService {
     return _folderId!;
   }
 
+  /// Returns true only when Drive confirms the exact uploaded file size and MD5.
+  static bool uploadMetadataMatches({
+    required String expectedName,
+    required int expectedSize,
+    required String expectedMd5,
+    required Map<String, dynamic> metadata,
+  }) {
+    final id = metadata['id'] as String? ?? '';
+    final name = metadata['name'] as String? ?? '';
+    final size = int.tryParse(metadata['size']?.toString() ?? '');
+    final md5 = metadata['md5Checksum'] as String? ?? '';
+    return id.isNotEmpty &&
+        name == expectedName &&
+        size == expectedSize &&
+        md5.isNotEmpty &&
+        md5.toLowerCase() == expectedMd5.toLowerCase();
+  }
+
   Future<void> upload(File backup) async {
     if (!await backup.exists()) throw Exception('Local backup file was not found.');
+    if (!await BackupService.instance.looksLikeDatabase(backup)) {
+      throw Exception('Local backup failed SQLite integrity verification.');
+    }
     final folderId = await _folder();
     final token = await _accessToken();
     final boundary = 'shopmaster_${DateTime.now().microsecondsSinceEpoch}';
@@ -95,6 +119,7 @@ class GoogleDriveBackupService {
       'parents': [folderId],
     });
     final bytes = await backup.readAsBytes();
+    final expectedMd5 = (await crypto.md5.bind(backup.openRead())).toString();
     final prefix = utf8.encode('--$boundary\r\n'
         'Content-Type: application/json; charset=UTF-8\r\n\r\n'
         '$metadata\r\n'
@@ -106,7 +131,7 @@ class GoogleDriveBackupService {
       ..setRange(prefix.length, prefix.length + bytes.length, bytes)
       ..setRange(prefix.length + bytes.length, prefix.length + bytes.length + suffix.length, suffix);
     final response = await http.post(
-      Uri.parse('$_uploadApi/files?uploadType=multipart&fields=id,name'),
+      Uri.parse('$_uploadApi/files?uploadType=multipart&fields=id,name,size,md5Checksum'),
       headers: {
         'Authorization': 'Bearer $token',
         'Content-Type': 'multipart/related; boundary=$boundary',
@@ -116,6 +141,17 @@ class GoogleDriveBackupService {
     );
     if (response.statusCode != 200 && response.statusCode != 201) {
       throw Exception('Google Drive upload failed (' + response.statusCode.toString() + ').');
+    }
+    final metadata = jsonDecode(response.body) as Map<String, dynamic>;
+    if (!uploadMetadataMatches(
+      expectedName: p.basename(backup.path),
+      expectedSize: bytes.length,
+      expectedMd5: expectedMd5,
+      metadata: metadata,
+    )) {
+      throw Exception(
+        'Google Drive received the file, but its size or checksum did not match. Upload verification failed.',
+      );
     }
   }
 
