@@ -39,6 +39,10 @@ class InvoiceRepository {
     bool finiteNonNegative(double value) =>
         value.isFinite && value >= 0;
 
+    if (!_isIsoDate(draft.invoiceDate)) {
+      throw ArgumentError('Invoice date must be a valid date in yyyy-MM-dd format.');
+    }
+
     final headerValues = <double>[
       draft.subtotal,
       draft.discountTotal,
@@ -83,12 +87,26 @@ class InvoiceRepository {
       if (item.gstRate < 0 || item.gstRate > 100) {
         throw ArgumentError('GST rate for "${item.name}" must be between 0 and 100.');
       }
+      final expiryDate = item.expiryDate;
+      if (expiryDate != null && !_isIsoDate(expiryDate)) {
+        throw ArgumentError(
+          'Expiry date for "${item.name}" must be a valid date in yyyy-MM-dd format.',
+        );
+      }
       if (item.warrantyMonths < 0) {
         throw ArgumentError('Warranty months for "${item.name}" cannot be negative.');
       }
     }
   }
 
+  /// Accept only real calendar dates in the app's yyyy-MM-dd format.
+  static bool _isIsoDate(String value) {
+    if (value.length != 10 || value[4] != '-' || value[7] != '-') {
+      return false;
+    }
+    final parsed = DateTime.tryParse(value);
+    return parsed != null && _iso(parsed) == value;
+  }
   /// Saves the document, updates stock, serials, the party balance and the
   /// cash/bank account, all in one transaction (all or nothing).
   /// Returns the new document number. Throws [SerialException] if a serial

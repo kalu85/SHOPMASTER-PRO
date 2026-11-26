@@ -145,6 +145,57 @@ void main() {
       }
     });
 
+    test('rejects invalid invoice calendar dates', () {
+      for (final date in ['2026-02-30', '2026/11/26', 'not-a-date']) {
+        final invalid = Invoice(
+          kind: InvoiceKind.sale,
+          docType: DocType.invoice,
+          isGst: true,
+          invoiceDate: date,
+          subtotal: 100,
+          discountTotal: 0,
+          taxableTotal: 100,
+          cgst: 9,
+          sgst: 9,
+          igst: 0,
+          grandTotal: 118,
+        );
+        expect(
+          () => InvoiceRepository.validateDocument(invalid, [validItem]),
+          throwsArgumentError,
+        );
+      }
+    });
+
+    test('rejects malformed batch expiry dates but accepts a real date', () {
+      const validExpiryItem = InvoiceItem(
+        name: 'Phone',
+        qty: 1,
+        rate: 100,
+        taxable: 100,
+        amount: 100,
+        expiryDate: '2027-02-28',
+      );
+      expect(
+        () => InvoiceRepository.validateDocument(validInvoice, [validExpiryItem]),
+        returnsNormally,
+      );
+      for (final date in ['2027-02-29', '2027-13-01', '28-02-2027']) {
+        final invalidItem = InvoiceItem(
+          name: 'Phone',
+          qty: 1,
+          rate: 100,
+          taxable: 100,
+          amount: 100,
+          expiryDate: date,
+        );
+        expect(
+          () => InvoiceRepository.validateDocument(validInvoice, [invalidItem]),
+          throwsArgumentError,
+        );
+      }
+    });
+
     test('rejects invalid GST rates and blank item names', () {
       expect(
         () => InvoiceRepository.validateDocument(validInvoice, [
