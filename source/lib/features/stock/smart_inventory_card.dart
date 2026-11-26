@@ -1,6 +1,7 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'dart:io';
 
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
@@ -163,7 +164,7 @@ class _SmartInventoryCardState extends State<SmartInventoryCard> {
         [XFile(file.path, mimeType: 'text/csv')],
         subject: 'SHOPMASTER PRO stock reorder list',
       );
-    } catch (e) {
+    } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Could not export the reorder spreadsheet.')),
