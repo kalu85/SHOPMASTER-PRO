@@ -2,8 +2,8 @@ import 'package:sqflite/sqflite.dart';
 
 import '../db/app_database.dart';
 import '../models/invoice.dart';
-import '../utils/serials.dart';
 import '../utils/csv_safety.dart';
+import '../utils/serials.dart';
 
 enum ReportType {
   salesSummary,
