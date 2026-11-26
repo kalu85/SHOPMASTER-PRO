@@ -105,6 +105,27 @@ class GoogleDriveBackupService {
         md5.toLowerCase() == expectedMd5.toLowerCase();
   }
 
+  /// Confirms that downloaded bytes match the exact Drive file metadata.
+  static bool downloadMetadataMatches({
+    required String expectedId,
+    required String expectedName,
+    required int downloadedSize,
+    required String downloadedMd5,
+    required Map<String, dynamic> metadata,
+  }) {
+    final id = metadata['id'] as String? ?? '';
+    final name = metadata['name'] as String? ?? '';
+    final size = int.tryParse(metadata['size']?.toString() ?? '');
+    final md5 = metadata['md5Checksum'] as String? ?? '';
+    return expectedId.isNotEmpty &&
+        expectedName.isNotEmpty &&
+        id == expectedId &&
+        name == expectedName &&
+        size == downloadedSize &&
+        md5.isNotEmpty &&
+        md5.toLowerCase() == downloadedMd5.toLowerCase();
+  }
+
   Future<void> upload(File backup) async {
     if (!await backup.exists()) throw Exception('Local backup file was not found.');
     if (!await BackupService.instance.looksLikeDatabase(backup)) {
@@ -159,7 +180,7 @@ class GoogleDriveBackupService {
     final folderId = await _folder();
     final q = Uri.encodeQueryComponent("'$folderId' in parents and trashed=false");
     final response = await http.get(
-      Uri.parse('$_api/files?q=$q&orderBy=createdTime desc&pageSize=50&fields=files(id,name,createdTime,size,mimeType)'),
+      Uri.parse('$_api/files?q=$q&orderBy=createdTime desc&pageSize=50&fields=files(id,name,createdTime,size,md5Checksum,mimeType)'),
       headers: await _headers(),
     );
     if (response.statusCode != 200) {
@@ -172,13 +193,42 @@ class GoogleDriveBackupService {
   }
 
   Future<File> download(String id, String name) async {
+    final headers = await _headers();
+    final metadataResponse = await http.get(
+      Uri.parse('$_api/files/$id?fields=id,name,size,md5Checksum'),
+      headers: headers,
+    );
+    if (metadataResponse.statusCode != 200) {
+      throw Exception('Could not verify Google Drive backup metadata (' +
+          metadataResponse.statusCode.toString() + ').');
+    }
+    final metadata =
+        jsonDecode(metadataResponse.body) as Map<String, dynamic>;
+    if (metadata['id'] != id || metadata['name'] != name) {
+      throw Exception('The selected Google Drive backup identity changed.');
+    }
+
     final response = await http.get(
       Uri.parse('$_api/files/$id?alt=media'),
-      headers: await _headers(),
+      headers: headers,
     );
     if (response.statusCode != 200) {
-      throw Exception('Google Drive download failed (' + response.statusCode.toString() + ').');
+      throw Exception('Google Drive download failed (' +
+          response.statusCode.toString() + ').');
     }
+    final downloadedMd5 = crypto.md5.convert(response.bodyBytes).toString();
+    if (!downloadMetadataMatches(
+      expectedId: id,
+      expectedName: name,
+      downloadedSize: response.bodyBytes.length,
+      downloadedMd5: downloadedMd5,
+      metadata: metadata,
+    )) {
+      throw Exception(
+        'Downloaded backup did not match Google Drive size and checksum. The file was rejected.',
+      );
+    }
+
     final dir = await getTemporaryDirectory();
     final safeName = p.basename(name).replaceAll(RegExp(r'[^A-Za-z0-9_.-]'), '_');
     final file = File(p.join(dir.path, 'drive_restore_$safeName'));
