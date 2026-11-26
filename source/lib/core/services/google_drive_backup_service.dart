@@ -119,7 +119,7 @@ class GoogleDriveBackupService {
       'parents': [folderId],
     });
     final bytes = await backup.readAsBytes();
-    final expectedMd5 = (await crypto.md5.bind(backup.openRead()).first).toString();
+    final expectedMd5 = (await crypto.md5.bind(backup.openRead())).toString();
     final prefix = utf8.encode('--$boundary\r\n'
         'Content-Type: application/json; charset=UTF-8\r\n\r\n'
         '$metadata\r\n'
