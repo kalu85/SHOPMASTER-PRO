@@ -1,10 +1,17 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../core/db/app_database.dart';
 import '../../core/models/product.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/format.dart';
+import '../../core/utils/stock_reorder_export.dart';
 
 /// Inventory health, reorder suggestions, supplier grouping and slow-stock hints.
 class SmartInventoryCard extends StatefulWidget {
@@ -74,7 +81,7 @@ class _SmartInventoryCardState extends State<SmartInventoryCard> {
           final supplier = p.supplierName.trim().isEmpty
               ? 'Supplier not assigned'
               : p.supplierName.trim();
-          reorder.add(_ReorderItem(p, qty, supplier));
+          reorder.add(_ReorderItem(p, qty, supplier, sold));
           (suppliers[supplier] ??= []).add(
               '${p.name}: ${fmtQty(qty)}');
         }
@@ -132,6 +139,39 @@ class _SmartInventoryCardState extends State<SmartInventoryCard> {
     );
   }
 
+  Future<void> _exportReorderCsv() async {
+    if (_reorder.isEmpty) return;
+    try {
+      final csv = buildStockReorderCsv(
+        preparedAt: DateTime.now(),
+        rows: [
+          for (final item in _reorder)
+            StockReorderCsvRow(
+              supplier: item.supplier,
+              item: item.product.name,
+              currentStock: item.product.currentStock,
+              minimumStock: item.product.minStock,
+              soldLast30Days: item.soldLast30Days,
+              suggestedOrderQty: item.quantity,
+              purchaseRate: item.product.purchaseRate,
+            ),
+        ],
+      );
+      final directory = await getTemporaryDirectory();
+      final file = File(p.join(directory.path, 'shopmaster_stock_reorder.csv'));
+      await file.writeAsString(csv, flush: true);
+      await Share.shareXFiles(
+        [XFile(file.path, mimeType: 'text/csv')],
+        subject: 'SHOPMASTER PRO stock reorder list',
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not export the reorder spreadsheet.')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Card(
@@ -172,6 +212,11 @@ class _SmartInventoryCardState extends State<SmartInventoryCard> {
                   onPressed: _copyReorderList,
                   icon: const Icon(Icons.copy_rounded, size: 17),
                   label: const Text('Copy list'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: _exportReorderCsv,
+                  icon: const Icon(Icons.table_chart_rounded, size: 17),
+                  label: const Text('Export CSV'),
                 ),
               ]),
               for (final item in _reorder.take(8))
@@ -241,8 +286,15 @@ class _SmartInventoryCardState extends State<SmartInventoryCard> {
 }
 
 class _ReorderItem {
-  const _ReorderItem(this.product, this.quantity, this.supplier);
+  const _ReorderItem(
+    this.product,
+    this.quantity,
+    this.supplier,
+    this.soldLast30Days,
+  );
+
   final Product product;
   final double quantity;
   final String supplier;
+  final double soldLast30Days;
 }
