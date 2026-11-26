@@ -137,12 +137,33 @@ class BackupService {
     }
     await backupNow(label: 'before_restore');
     final dbPath = await AppDatabase.instance.path;
-    await AppDatabase.instance.close();
-    for (final suffix in ['-wal', '-shm', '-journal']) {
-      final extra = File('$dbPath$suffix');
-      if (await extra.exists()) await extra.delete();
+    final staged = File(
+      '$dbPath.restore_\${DateTime.now().microsecondsSinceEpoch}.tmp',
+    );
+
+    try {
+      // Copy and fully validate the replacement before touching the current
+      // database. A failed or interrupted copy must not destroy live shop data.
+      await backup.copy(staged.path);
+      if (!await looksLikeDatabase(staged)) {
+        throw BackupException(
+          'Restore verification failed. Your current data was not replaced.',
+        );
+      }
+
+      await AppDatabase.instance.close();
+      for (final suffix in ['-wal', '-shm', '-journal']) {
+        final extra = File('$dbPath$suffix');
+        if (await extra.exists()) await extra.delete();
+      }
+
+      // The staging file is in the same directory, so the final rename is a
+      // same-filesystem replacement after the full SQLite integrity check.
+      await staged.rename(dbPath);
+    } finally {
+      // Clean up an incomplete staging file; never remove the original DB here.
+      if (await staged.exists()) await staged.delete();
     }
-    await backup.copy(dbPath);
   }
 
   /// Daily automatic backup, done when the app starts.
