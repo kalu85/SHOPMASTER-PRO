@@ -178,6 +178,29 @@ bool gstLineTaxAmountMismatch({
   return (expectedTax - recordedTax).abs() > tolerance;
 }
 
+/// Classifies unpaid invoices by calendar-day age.
+/// Invalid and future dates are separate review buckets.
+String outstandingAgeBucket(String? invoiceDate, DateTime today) {
+  if (invoiceDate == null || invoiceDate.length != 10 ||
+      invoiceDate[4] != '-' || invoiceDate[7] != '-') {
+    return 'Invalid date';
+  }
+  final parsed = DateTime.tryParse(invoiceDate);
+  if (parsed == null ||
+      parsed.year.toString().padLeft(4, '0') != invoiceDate.substring(0, 4) ||
+      parsed.month.toString().padLeft(2, '0') != invoiceDate.substring(5, 7) ||
+      parsed.day.toString().padLeft(2, '0') != invoiceDate.substring(8, 10)) {
+    return 'Invalid date';
+  }
+  final invoiceDay = DateTime(parsed.year, parsed.month, parsed.day);
+  final todayDay = DateTime(today.year, today.month, today.day);
+  final age = todayDay.difference(invoiceDay).inDays;
+  if (age < 0) return 'Future dated';
+  if (age <= 30) return '0-30 days';
+  if (age <= 60) return '31-60 days';
+  if (age <= 90) return '61-90 days';
+  return 'Over 90 days';
+}
 class ReportRepository {
   ReportRepository._();
   static final ReportRepository instance = ReportRepository._();
@@ -242,23 +265,33 @@ class ReportRepository {
       ORDER BY invoice_date ASC, id ASC
     ''');
     final out = <List<String>>[];
-    var current = 0.0, d30 = 0.0, d60 = 0.0, d90 = 0.0, total = 0.0;
+    var current = 0.0, d30 = 0.0, d60 = 0.0, d90 = 0.0;
+    var futureDated = 0.0, invalidDate = 0.0, total = 0.0;
     for (final row in rows) {
-      final date = DateTime.tryParse(row['invoice_date'] as String? ?? '');
-      final age = date == null ? 0 : today.difference(date).inDays;
+      final date = row['invoice_date'] as String?;
       final due = _d(row['due']);
-      final bucket = age <= 30 ? '0-30 days' : age <= 60 ? '31-60 days' : age <= 90 ? '61-90 days' : 'Over 90 days';
-      if (age <= 30) { current += due; }
-      else if (age <= 60) { d30 += due; }
-      else if (age <= 90) { d60 += due; }
-      else { d90 += due; }
+      final bucket = outstandingAgeBucket(date, today);
+      switch (bucket) {
+        case '0-30 days':
+          current += due;
+        case '31-60 days':
+          d30 += due;
+        case '61-90 days':
+          d60 += due;
+        case 'Over 90 days':
+          d90 += due;
+        case 'Future dated':
+          futureDated += due;
+        case 'Invalid date':
+          invalidDate += due;
+      }
       total += due;
       out.add([
         row['kind'] == 'sale' ? 'Customer' : 'Supplier',
         row['number'] as String? ?? '',
         row['party_name'] as String? ?? '',
-        row['invoice_date'] as String? ?? '',
-        age < 0 ? 'Future dated' : bucket,
+        date ?? '',
+        bucket,
         money(due),
       ]);
     }
@@ -271,11 +304,13 @@ class ReportRepository {
         '31-60 days: ${money(d30)}',
         '61-90 days: ${money(d60)}',
         'Over 90 days: ${money(d90)}',
+        'Future dated (review): ${money(futureDated)}',
+        'Invalid/missing invoice date (review): ${money(invalidDate)}',
         'Total outstanding: ${money(total)}',
+        'Age is measured from invoice date; contractual due dates are not stored.',
       ],
     );
   }
-
   Future<ReportData> _summary(
     InvoiceKind kind,
     String from,
