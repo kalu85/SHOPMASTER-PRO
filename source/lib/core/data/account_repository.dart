@@ -19,6 +19,18 @@ class AccountRepository {
         parsed.day.toString().padLeft(2, '0') == value.substring(8, 10);
   }
 
+  static void validateAccountDetails({
+    required String name,
+    required double openingBalance,
+    int? id,
+  }) {
+    if (id != null && id <= 0) throw ArgumentError('Account ID must be valid.');
+    if (name.trim().isEmpty) throw ArgumentError('Account name cannot be blank.');
+    if (!openingBalance.isFinite) {
+      throw ArgumentError.value(openingBalance, 'openingBalance', 'Must be finite.');
+    }
+  }
+
   static void validateManualTransaction({
     required int accountId,
     required double amount,
@@ -65,6 +77,7 @@ class AccountRepository {
   }
 
   Future<int> addBank(Account a) async {
+    validateAccountDetails(name: a.name, openingBalance: a.openingBalance);
     final db = await _db;
     return db.insert('accounts', {
       'kind': 'bank',
@@ -79,6 +92,8 @@ class AccountRepository {
   }
 
   Future<void> updateDetails(Account a) async {
+    validateAccountDetails(name: a.name, openingBalance: a.openingBalance, id: a.id);
+    if (a.id == null) throw ArgumentError('Account ID is required for an update.');
     final db = await _db;
     await db.update(
       'accounts',
@@ -113,12 +128,14 @@ class AccountRepository {
   }
 
   Future<List<AccountTxn>> txns({int? accountId, int limit = 200}) async {
+    if (accountId != null && accountId <= 0) throw ArgumentError('Account ID must be valid.');
+    final safeLimit = limit.clamp(1, 1000);
     final db = await _db;
     final rows = await db.rawQuery(
       'SELECT t.*, a.name AS account_name FROM account_txns t '
       'JOIN accounts a ON a.id = t.account_id '
       '${accountId == null ? '' : 'WHERE t.account_id = ? '}'
-      'ORDER BY t.txn_date DESC, t.id DESC LIMIT $limit',
+      'ORDER BY t.txn_date DESC, t.id DESC LIMIT $safeLimit',
       [if (accountId != null) accountId],
     );
     return rows.map(AccountTxn.fromMap).toList();
@@ -129,6 +146,7 @@ class AccountRepository {
     required int fromId,
     required int toId,
     required double amount,
+    required String date,
   }) {
     if (fromId <= 0 || toId <= 0) {
       throw ArgumentError('Choose two valid accounts.');
@@ -139,6 +157,7 @@ class AccountRepository {
     if (!amount.isFinite || amount <= 0) {
       throw ArgumentError.value(amount, 'amount', 'Must be finite and greater than zero.');
     }
+    if (!_isIsoDate(date)) throw ArgumentError('Transfer date must be a valid yyyy-MM-dd date.');
   }
 
   /// Moves money between two accounts (bank transfer, cash deposit or
@@ -151,7 +170,7 @@ class AccountRepository {
     required String date,
     String note = '',
   }) async {
-    validateTransfer(fromId: fromId, toId: toId, amount: amount);
+    validateTransfer(fromId: fromId, toId: toId, amount: amount, date: date);
     final db = await _db;
     await db.transaction((txn) async {
       final accounts = await txn.query(
@@ -246,6 +265,7 @@ class AccountRepository {
   }
 
   Future<void> deleteExpense(int id) async {
+    if (id <= 0) throw ArgumentError('Expense ID must be valid.');
     final db = await _db;
     await db.transaction((txn) async {
       await txn.delete('account_txns',

@@ -58,4 +58,22 @@ void main() {
         accountId: 1, payMode: 'Cash'), throwsArgumentError);
     });
   });
+  group('AccountRepository account detail validation', () {
+    test('accepts named accounts and finite opening balances', () {
+      expect(() => AccountRepository.validateAccountDetails(
+        name: 'Main Bank', openingBalance: -250.0), returnsNormally);
+    });
+
+    test('rejects blank names, invalid IDs and non-finite balances', () {
+      expect(() => AccountRepository.validateAccountDetails(
+        name: '  ', openingBalance: 0), throwsArgumentError);
+      expect(() => AccountRepository.validateAccountDetails(
+        name: 'Cash', openingBalance: double.nan), throwsArgumentError);
+      expect(() => AccountRepository.validateAccountDetails(
+        name: 'Cash', openingBalance: double.infinity), throwsArgumentError);
+      expect(() => AccountRepository.validateAccountDetails(
+        name: 'Cash', openingBalance: 0, id: 0), throwsArgumentError);
+    });
+  });
+
 }
