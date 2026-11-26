@@ -146,6 +146,36 @@ class ProductRepository {
     await db.delete('products', where: 'id = ?', whereArgs: [id]);
   }
 
+  /// Validates a stock movement and the resulting on-hand quantity.
+  static double validateStockAdjustment({
+    required int productId,
+    required double currentStock,
+    required double change,
+    required String reason,
+    double? expectedCurrentStock,
+  }) {
+    if (productId <= 0) {
+      throw ArgumentError.value(productId, 'productId', 'Must be a positive item ID.');
+    }
+    if (!currentStock.isFinite) {
+      throw ArgumentError.value(currentStock, 'currentStock', 'Must be finite.');
+    }
+    if (!change.isFinite || change == 0) {
+      throw ArgumentError.value(change, 'change', 'Must be a finite, non-zero quantity.');
+    }
+    if (reason.trim().isEmpty) {
+      throw ArgumentError.value(reason, 'reason', 'A stock movement reason is required.');
+    }
+    if (expectedCurrentStock != null && !expectedCurrentStock.isFinite) {
+      throw ArgumentError.value(expectedCurrentStock, 'expectedCurrentStock', 'Must be finite.');
+    }
+    final nextStock = currentStock + change;
+    if (!nextStock.isFinite) {
+      throw ArgumentError('The resulting stock quantity is outside the supported numeric range.');
+    }
+    return nextStock;
+  }
+
   Future<void> adjustStock({
     required int productId,
     required double change,
@@ -153,8 +183,17 @@ class ProductRepository {
     String note = '',
     double? expectedCurrentStock,
   }) async {
+    if (productId <= 0) {
+      throw ArgumentError.value(productId, 'productId', 'Must be a positive item ID.');
+    }
     if (!change.isFinite || change == 0) {
       throw ArgumentError.value(change, 'change', 'Must be a finite, non-zero quantity.');
+    }
+    if (reason.trim().isEmpty) {
+      throw ArgumentError.value(reason, 'reason', 'A stock movement reason is required.');
+    }
+    if (expectedCurrentStock != null && !expectedCurrentStock.isFinite) {
+      throw ArgumentError.value(expectedCurrentStock, 'expectedCurrentStock', 'Must be finite.');
     }
     final db = await _db;
     await db.transaction((txn) async {
@@ -170,15 +209,21 @@ class ProductRepository {
         throw StateError('Service items do not have stock to adjust.');
       }
       final currentStock = (rows.first['current_stock'] as num).toDouble();
-      if (!currentStock.isFinite) {
-        throw StateError('Current stock is invalid. Correct the item before adjusting it.');
-      }
       if (expectedCurrentStock != null && currentStock != expectedCurrentStock) {
         throw StockChangedException(currentStock);
       }
-      await txn.rawUpdate(
-        'UPDATE products SET current_stock = current_stock + ? WHERE id = ?',
-        [change, productId],
+      final nextStock = validateStockAdjustment(
+        productId: productId,
+        currentStock: currentStock,
+        change: change,
+        reason: reason,
+        expectedCurrentStock: expectedCurrentStock,
+      );
+      await txn.update(
+        'products',
+        {'current_stock': nextStock},
+        where: 'id = ?',
+        whereArgs: [productId],
       );
       await txn.insert('stock_movements', {
         'product_id': productId,

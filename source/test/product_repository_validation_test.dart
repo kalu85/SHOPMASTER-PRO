@@ -12,6 +12,47 @@ void main() {
     minStock: 2,
   );
 
+  group('ProductRepository stock adjustment validation', () {
+    test('accepts a valid stock movement and returns resulting stock', () {
+      expect(
+        ProductRepository.validateStockAdjustment(
+          productId: 4,
+          currentStock: 10,
+          change: -2.5,
+          reason: 'Sales return correction',
+          expectedCurrentStock: 10,
+        ),
+        7.5,
+      );
+    });
+
+    test('rejects invalid item IDs, quantities, reasons and expected stock', () {
+      final invalid = [
+        () => ProductRepository.validateStockAdjustment(productId: 0, currentStock: 2, change: 1, reason: 'Count'),
+        () => ProductRepository.validateStockAdjustment(productId: 1, currentStock: 2, change: 0, reason: 'Count'),
+        () => ProductRepository.validateStockAdjustment(productId: 1, currentStock: 2, change: double.nan, reason: 'Count'),
+        () => ProductRepository.validateStockAdjustment(productId: 1, currentStock: 2, change: 1, reason: '  '),
+        () => ProductRepository.validateStockAdjustment(productId: 1, currentStock: double.infinity, change: 1, reason: 'Count'),
+        () => ProductRepository.validateStockAdjustment(productId: 1, currentStock: 2, change: 1, reason: 'Count', expectedCurrentStock: double.nan),
+      ];
+      for (final validate in invalid) {
+        expect(validate, throwsArgumentError);
+      }
+    });
+
+    test('rejects arithmetic overflow in the resulting stock', () {
+      expect(
+        () => ProductRepository.validateStockAdjustment(
+          productId: 1,
+          currentStock: double.maxFinite,
+          change: double.maxFinite,
+          reason: 'Stock count',
+        ),
+        throwsArgumentError,
+      );
+    });
+  });
+
   group('ProductRepository product validation', () {
     test('accepts valid product details', () {
       expect(() => ProductRepository.validateProduct(validProduct), returnsNormally);
