@@ -92,4 +92,25 @@ void main() {
     });
   });
 
+  group('outstanding ageing date buckets', () {
+    final today = DateTime(2026, 11, 26, 17, 30);
+
+    test('uses calendar dates for 0, 30, 31, 60, 61, 90 and 91 days', () {
+      expect(outstandingAgeBucket('2026-11-26', today), '0-30 days');
+      expect(outstandingAgeBucket('2026-10-27', today), '0-30 days');
+      expect(outstandingAgeBucket('2026-10-26', today), '31-60 days');
+      expect(outstandingAgeBucket('2026-09-27', today), '31-60 days');
+      expect(outstandingAgeBucket('2026-09-26', today), '61-90 days');
+      expect(outstandingAgeBucket('2026-08-28', today), '61-90 days');
+      expect(outstandingAgeBucket('2026-08-27', today), 'Over 90 days');
+    });
+
+    test('keeps future and invalid dates out of ageing buckets', () {
+      expect(outstandingAgeBucket('2026-11-27', today), 'Future dated');
+      expect(outstandingAgeBucket('2026-02-30', today), 'Invalid date');
+      expect(outstandingAgeBucket('', today), 'Invalid date');
+      expect(outstandingAgeBucket(null, today), 'Invalid date');
+    });
+  });
+
 }
