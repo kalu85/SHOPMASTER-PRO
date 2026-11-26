@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shopmaster_pro/core/data/account_repository.dart';
+import 'package:shopmaster_pro/core/data/report_repository.dart';
 
 void main() {
   group('AccountRepository manual transaction validation', () {
@@ -73,6 +74,52 @@ void main() {
         name: 'Cash', openingBalance: double.infinity), throwsArgumentError);
       expect(() => AccountRepository.validateAccountDetails(
         name: 'Cash', openingBalance: 0, id: 0), throwsArgumentError);
+    });
+  });
+
+
+  group('cash and bank report period balances', () {
+    test('calculates opening and closing balances with prior and period activity', () {
+      final result = accountPeriodBalances(
+        accountOpeningBalance: 1000,
+        priorNet: 250,
+        periodIn: 500,
+        periodOut: 300,
+      );
+      expect(result.opening, 1250);
+      expect(result.closing, 1450);
+    });
+
+    test('supports overdraft and outgoing-heavy periods', () {
+      final result = accountPeriodBalances(
+        accountOpeningBalance: 100,
+        priorNet: -250,
+        periodIn: 20,
+        periodOut: 70,
+      );
+      expect(result.opening, -150);
+      expect(result.closing, -200);
+    });
+
+    test('rejects non-finite balance inputs and overflow', () {
+      expect(
+        () => accountPeriodBalances(
+          accountOpeningBalance: double.infinity,
+          priorNet: 0,
+          periodIn: 0,
+          periodOut: 0,
+        ),
+        throwsArgumentError,
+      );
+      expect(
+        () => accountPeriodBalances(
+          accountOpeningBalance: double.maxFinite,
+          priorNet: double.maxFinite,
+          periodIn: 0,
+          periodOut: 0,
+        ),
+        throwsArgumentError,
+      );
     });
   });
 

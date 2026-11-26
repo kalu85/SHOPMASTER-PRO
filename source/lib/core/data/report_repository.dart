@@ -201,6 +201,25 @@ String outstandingAgeBucket(String? invoiceDate, DateTime today) {
   if (age <= 90) return '61-90 days';
   return 'Over 90 days';
 }
+/// Calculates the balance at the start and end of a report period.
+({double opening, double closing}) accountPeriodBalances({
+  required double accountOpeningBalance,
+  required double priorNet,
+  required double periodIn,
+  required double periodOut,
+}) {
+  final values = [accountOpeningBalance, priorNet, periodIn, periodOut];
+  if (values.any((value) => !value.isFinite)) {
+    throw ArgumentError('Account period balance inputs must be finite.');
+  }
+  final opening = accountOpeningBalance + priorNet;
+  final closing = opening + periodIn - periodOut;
+  if (!opening.isFinite || !closing.isFinite) {
+    throw ArgumentError('Calculated account balance is not finite.');
+  }
+  return (opening: opening, closing: closing);
+}
+
 class ReportRepository {
   ReportRepository._();
   static final ReportRepository instance = ReportRepository._();
@@ -1029,6 +1048,23 @@ class ReportRepository {
       WHERE a.kind = ? AND t.txn_date BETWEEN ? AND ?
       ORDER BY t.txn_date, t.id
     ''', [kind, from, to]);
+    final accountRows = await db.rawQuery('''
+      SELECT a.id, a.name, a.opening_balance,
+        COALESCE((
+          SELECT SUM(CASE prior.direction WHEN 'in' THEN prior.amount
+            WHEN 'out' THEN -prior.amount ELSE 0 END)
+          FROM account_txns prior
+          WHERE prior.account_id = a.id AND prior.txn_date < ?
+        ), 0) AS prior_net,
+        COALESCE(SUM(CASE period.direction WHEN 'in' THEN period.amount ELSE 0 END), 0) AS period_in,
+        COALESCE(SUM(CASE period.direction WHEN 'out' THEN period.amount ELSE 0 END), 0) AS period_out
+      FROM accounts a
+      LEFT JOIN account_txns period ON period.account_id = a.id
+        AND period.txn_date BETWEEN ? AND ?
+      WHERE a.kind = ?
+      GROUP BY a.id
+      ORDER BY a.name COLLATE NOCASE
+    ''', [from, from, to, kind]);
     var tin = 0.0, tout = 0.0;
     final out = <List<String>>[];
     for (final r in rows) {
@@ -1048,16 +1084,33 @@ class ReportRepository {
         isIn ? '' : money(amt),
       ]);
     }
+    var totalOpening = 0.0, totalClosing = 0.0;
+    final accountSummaries = <String>[];
+    for (final row in accountRows) {
+      final balances = accountPeriodBalances(
+        accountOpeningBalance: _d(row['opening_balance']),
+        priorNet: _d(row['prior_net']),
+        periodIn: _d(row['period_in']),
+        periodOut: _d(row['period_out']),
+      );
+      totalOpening += balances.opening;
+      totalClosing += balances.closing;
+      accountSummaries.add(
+        '${row['name']}: opening ${money(balances.opening)}, closing ${money(balances.closing)}',
+      );
+    }
     return ReportData(
       title: '${kind == 'cash' ? 'Cash' : 'Bank'} report ($from to $to)',
       columns: const ['Date', 'Account', 'Type', 'Details', 'In', 'Out'],
       rows: out,
       summary: [
         'Money in: ${money(tin)}   Money out: ${money(tout)}   Net: ${money(tin - tout)}',
+        'Opening balance (all accounts): ${money(totalOpening)}',
+        'Closing balance (all accounts): ${money(totalClosing)}',
+        ...accountSummaries,
       ],
     );
   }
-
   Future<ReportData> _expenses(String from, String to) async {
     final db = await _db;
     final rows = await db.query(
