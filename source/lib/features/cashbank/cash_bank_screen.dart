@@ -1,8 +1,14 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../core/data/account_repository.dart';
 import '../../core/models/account.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/utils/cash_bank_statement_export.dart';
 import '../../core/utils/format.dart';
 import '../../core/widgets/confirm_dialog.dart';
 
@@ -46,6 +52,43 @@ class _CashBankScreenState extends State<CashBankScreen> {
 
   InputDecoration _dec(String l) =>
       InputDecoration(labelText: l, border: const OutlineInputBorder());
+
+  Future<void> _exportStatement() async {
+    try {
+      final accounts = _filterId == null
+          ? _accounts
+          : _accounts.where((account) => account.id == _filterId).toList();
+      if (accounts.isEmpty) {
+        _msg('No account is available to export.');
+        return;
+      }
+      final transactions = await AccountRepository.instance.txns(
+        accountId: _filterId,
+        limit: 10000,
+      );
+      final csv = buildCashBankStatementCsv(
+        accounts: accounts,
+        transactions: transactions,
+      );
+      final directory = await getTemporaryDirectory();
+      final file = File(p.join(
+        directory.path,
+        _filterId == null
+            ? 'shopmaster_cash_bank_statement.csv'
+            : 'shopmaster_account_statement.csv',
+      ));
+      await file.writeAsString(csv, flush: true);
+      await Share.shareXFiles(
+        [XFile(file.path, mimeType: 'text/csv')],
+        subject: _filterId == null
+            ? 'SHOPMASTER PRO cash and bank statement'
+            : 'SHOPMASTER PRO account statement',
+      );
+    } catch (_) {
+      if (!mounted) return;
+      _msg('Could not export the cash/bank statement.');
+    }
+  }
 
   Future<void> _addBank() async {
     final name = TextEditingController();
@@ -356,6 +399,10 @@ class _CashBankScreenState extends State<CashBankScreen> {
                       onPressed: _manual,
                       icon: const Icon(Icons.edit_note_rounded),
                       label: const Text('Money in / out')),
+                  OutlinedButton.icon(
+                      onPressed: _exportStatement,
+                      icon: const Icon(Icons.table_chart_rounded),
+                      label: const Text('Export statement CSV')),
                 ],
               ),
               const SizedBox(height: 16),
