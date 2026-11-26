@@ -58,7 +58,32 @@ class ProductRepository {
     return rows.map(Product.fromMap).toList();
   }
 
+  /// Validate item details before either creating or editing a product.
+  static void validateProduct(Product product, {bool requireId = false}) {
+    if (product.name.trim().isEmpty) {
+      throw ArgumentError('Item name cannot be blank.');
+    }
+    if (requireId && product.id == null) {
+      throw ArgumentError('An existing item ID is required for updates.');
+    }
+    final values = <String, double>{
+      'purchase rate': product.purchaseRate,
+      'sale rate': product.saleRate,
+      'opening stock': product.openingStock,
+      'minimum stock': product.minStock,
+    };
+    for (final entry in values.entries) {
+      if (!entry.value.isFinite || entry.value < 0) {
+        throw ArgumentError('Item ${entry.key} must be a finite, non-negative number.');
+      }
+    }
+    if (product.gstRate < 0 || product.gstRate > 100) {
+      throw ArgumentError('GST rate must be between 0 and 100.');
+    }
+  }
+
   Future<int> insert(Product p) async {
+    validateProduct(p);
     final db = await _db;
     try {
       return await db.transaction((txn) async {
@@ -89,6 +114,7 @@ class ProductRepository {
 
   /// Updates details only. Stock quantity changes go through [adjustStock].
   Future<void> update(Product p) async {
+    validateProduct(p, requireId: true);
     final db = await _db;
     try {
       await db.update(
