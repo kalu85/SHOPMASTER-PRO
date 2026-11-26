@@ -18,7 +18,7 @@ void main() {
     });
 
     test('rejects blank item names', () {
-      for (final name in ['', '   ', '\\n\\t']) {
+      for (final name in ['', '   ', '\n\t']) {
         expect(
           () => ProductRepository.validateProduct(Product(name: name)),
           throwsArgumentError,
