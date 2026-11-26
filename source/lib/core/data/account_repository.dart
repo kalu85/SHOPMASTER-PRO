@@ -9,6 +9,46 @@ class AccountRepository {
 
   Future<Database> get _db => AppDatabase.instance.db;
 
+  /// Accept only real calendar dates in the app's yyyy-MM-dd format.
+  static bool _isIsoDate(String value) {
+    if (value.length != 10 || value[4] != '-' || value[7] != '-') return false;
+    final parsed = DateTime.tryParse(value);
+    return parsed != null &&
+        parsed.year.toString().padLeft(4, '0') == value.substring(0, 4) &&
+        parsed.month.toString().padLeft(2, '0') == value.substring(5, 7) &&
+        parsed.day.toString().padLeft(2, '0') == value.substring(8, 10);
+  }
+
+  static void validateManualTransaction({
+    required int accountId,
+    required double amount,
+    required String date,
+  }) {
+    if (accountId <= 0) throw ArgumentError('Choose a valid cash/bank account.');
+    if (!amount.isFinite || amount <= 0) {
+      throw ArgumentError.value(amount, 'amount', 'Must be finite and greater than zero.');
+    }
+    if (!_isIsoDate(date)) throw ArgumentError('Transaction date must be a valid yyyy-MM-dd date.');
+  }
+
+  static void validateExpense({
+    required String category,
+    required String date,
+    required double amount,
+    required int accountId,
+    int? id,
+    required String payMode,
+  }) {
+    if (id != null && id <= 0) throw ArgumentError('Expense ID must be valid.');
+    if (category.trim().isEmpty) throw ArgumentError('Expense category cannot be blank.');
+    if (payMode.trim().isEmpty) throw ArgumentError('Payment mode cannot be blank.');
+    if (accountId <= 0) throw ArgumentError('Choose a valid cash/bank account.');
+    if (!amount.isFinite || amount <= 0) {
+      throw ArgumentError.value(amount, 'amount', 'Must be finite and greater than zero.');
+    }
+    if (!_isIsoDate(date)) throw ArgumentError('Expense date must be a valid yyyy-MM-dd date.');
+  }
+
   static const String _balanceSql = '''
     SELECT a.*, a.opening_balance + COALESCE(SUM(
       CASE t.direction WHEN 'in' THEN t.amount WHEN 'out' THEN -t.amount ELSE 0 END
@@ -154,6 +194,7 @@ class AccountRepository {
     required String date,
     String note = '',
   }) async {
+    validateManualTransaction(accountId: accountId, amount: amount, date: date);
     final db = await _db;
     await db.insert('account_txns', {
       'account_id': accountId,
@@ -177,6 +218,7 @@ class AccountRepository {
     required String payMode,
     String notes = '',
   }) async {
+    validateExpense(category: category, date: date, amount: amount, accountId: accountId, payMode: payMode);
     final db = await _db;
     return db.transaction((txn) async {
       final now = DateTime.now().toIso8601String();
@@ -223,6 +265,7 @@ class AccountRepository {
     required String payMode,
     String notes = '',
   }) async {
+    validateExpense(id: id, category: category, date: date, amount: amount, accountId: accountId, payMode: payMode);
     final db = await _db;
     await db.transaction((txn) async {
       final existing = await txn.query(
