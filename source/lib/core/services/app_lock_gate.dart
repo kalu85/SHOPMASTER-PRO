@@ -57,6 +57,9 @@ class _AppLockGateState extends State<AppLockGate>
     if (_checking || _pin.text.length < 4) return;
     setState(() => _checking = true);
     final valid = await AppLockService.instance.verifyPin(_pin.text);
+    final remaining = valid
+        ? null
+        : await AppLockService.instance.lockoutRemaining;
     if (!mounted) return;
     setState(() {
       _checking = false;
@@ -65,7 +68,9 @@ class _AppLockGateState extends State<AppLockGate>
         _error = null;
         _pin.clear();
       } else {
-        _error = 'Incorrect PIN. Try again.';
+        _error = remaining == null
+            ? 'Incorrect PIN. Try again.'
+            : 'Too many attempts. Try again in ${remaining.inSeconds + 1} seconds.';
         _pin.clear();
       }
     });
