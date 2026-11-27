@@ -59,6 +59,10 @@ class InvoiceRepository {
       );
     }
 
+    if (draft.paid > draft.grandTotal + 0.005) {
+      throw ArgumentError('Paid amount cannot exceed the invoice total.');
+    }
+
     for (var index = 0; index < items.length; index++) {
       final item = items[index];
       if (item.name.trim().isEmpty) {
@@ -170,9 +174,21 @@ class InvoiceRepository {
         final change = dir * it.qty;
         final updated = await txn.rawUpdate(
           'UPDATE products SET current_stock = current_stock + ? '
-          'WHERE id = ? AND is_service = 0',
-          [change, pid],
+          'WHERE id = ? AND is_service = 0 AND current_stock + ? >= -0.000001',
+          [change, pid, change],
         );
+        if (updated == 0) {
+          final productRows = await txn.query(
+            'products', columns: ['id', 'is_service', 'current_stock'],
+            where: 'id = ?', whereArgs: [pid], limit: 1,
+          );
+          if (productRows.isEmpty) {
+            throw StateError('A product on this invoice no longer exists.');
+          }
+          if ((productRows.first['is_service'] as num).toInt() == 0) {
+            throw StateError('Insufficient stock for this invoice item.');
+          }
+        }
         if (updated > 0) {
           await txn.insert('stock_movements', {
             'product_id': pid,
@@ -216,7 +232,16 @@ class InvoiceRepository {
             where: "kind = 'cash'", limit: 1);
         if (cash.isNotEmpty) accountId = cash.first['id'] as int?;
       }
-      if (accountId != null) {
+      if (accountId == null) {
+        throw StateError('No cash/bank account is available for this payment.');
+      }
+      final accountRows = await txn.query(
+        'accounts', columns: ['id'], where: 'id = ?', whereArgs: [accountId], limit: 1,
+      );
+      if (accountRows.isEmpty) {
+        throw StateError('The selected cash/bank account no longer exists.');
+      }
+      {
         final kindLabel = switch ((draft.kind, draft.docType)) {
           (InvoiceKind.sale, DocType.returnNote) => 'sale_return',
           (InvoiceKind.purchase, DocType.returnNote) => 'purchase_return',
