@@ -109,6 +109,27 @@ void main() {
       );
     });
 
+    test('rejects payments greater than the invoice total', () {
+      final overpaid = Invoice(
+        kind: InvoiceKind.sale,
+        docType: DocType.invoice,
+        isGst: true,
+        invoiceDate: '2026-11-26',
+        subtotal: 100,
+        discountTotal: 0,
+        taxableTotal: 100,
+        cgst: 9,
+        sgst: 9,
+        igst: 0,
+        grandTotal: 118,
+        paid: 118.01,
+      );
+      expect(
+        () => InvoiceRepository.validateDocument(overpaid, [validItem]),
+        throwsArgumentError,
+      );
+    });
+
     test('rejects zero and negative quantities', () {
       for (final quantity in [0.0, -1.0]) {
         expect(
